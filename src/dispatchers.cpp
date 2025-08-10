@@ -1,5 +1,4 @@
 #include <climits>
-#include <float.h>
 #include <hyprland/src/Compositor.hpp>
 #include <hyprland/src/SharedDefs.hpp>
 #include <hyprland/src/debug/Log.hpp>
@@ -38,24 +37,6 @@ void notify(const std::string &message)
 {
     HyprlandAPI::invokeHyprctlCommand("notify", "1 1000000 0 " + message);
 }
-
-// void update_workspace_name(int workspace_id)
-// {
-//     if (workspace_id % MAX_WS_PER_COLUMN == 0)
-//     {
-//         HyprlandAPI::invokeHyprctlCommand("dispatch", "renameworkspace " + std::to_string(workspace_id) + " " +
-//                                                           std::to_string(workspace_id / MAX_WS_PER_COLUMN));
-//         return;
-//     }
-//     else
-//     {
-//         char suffix = 'a' + (workspace_id % MAX_WS_PER_COLUMN) - 1;
-//         HyprlandAPI::invokeHyprctlCommand("dispatch", "renameworkspace " + std::to_string(workspace_id) + " " +
-//                                                           std::to_string(workspace_id / MAX_WS_PER_COLUMN) + suffix);
-//
-//         return;
-//     }
-// }
 
 SDispatchResult dispatch_workspace(std::string arg)
 {
