@@ -41,7 +41,7 @@ void notify(const std::string &message)
 SDispatchResult dispatch_workspace(std::string arg)
 {
     const std::string &current_workspace_name = g_pCompositor->m_lastMonitor->m_activeWorkspace->m_name;
-    int current_column_id = name_to_column(current_workspace_name);
+    int current_column = name_to_column(current_workspace_name);
 
     if (arg == "previous")
     {
@@ -54,11 +54,11 @@ SDispatchResult dispatch_workspace(std::string arg)
             if (workspace_name.starts_with("special"))
                 continue;
 
-            int workspace_column_id = name_to_column(workspace_name);
+            int workspace_column = name_to_column(workspace_name);
 
-            if (workspace_column_id != current_column_id)
+            if (workspace_column != current_column)
             {
-                anim_type = workspace_column_id < current_column_id ? 'l' : 'r';
+                anim_type = workspace_column < current_column ? 'l' : 'r';
                 HyprlandAPI::invokeHyprctlCommand("dispatch", "workspace name:" + workspace_name);
                 anim_type = '\0';
 
@@ -69,18 +69,18 @@ SDispatchResult dispatch_workspace(std::string arg)
         return {};
     }
 
-    int target_column_id = std::stoi(arg);
+    int target_column = std::stoi(arg);
 
     for (auto const &window : g_pCompositor->m_windowFocusHistory)
     {
         const auto &workspace = window->m_workspace;
 
         const std::string &workspace_name = workspace->m_name;
-        int workspace_column_id = name_to_column(workspace_name);
+        int workspace_column = name_to_column(workspace_name);
 
-        if (workspace_column_id == target_column_id)
+        if (workspace_column == target_column)
         {
-            anim_type = workspace_column_id < current_column_id ? 'l' : 'r';
+            anim_type = workspace_column < current_column ? 'l' : 'r';
             HyprlandAPI::invokeHyprctlCommand("dispatch", "workspace name:" + workspace_name);
             anim_type = '\0';
             return {};
@@ -88,8 +88,8 @@ SDispatchResult dispatch_workspace(std::string arg)
     }
 
     // no window found on target workspace, simply switch to it
-    anim_type = target_column_id < current_column_id ? 'l' : 'r';
-    HyprlandAPI::invokeHyprctlCommand("dispatch", "workspace name:" + std::to_string(target_column_id));
+    anim_type = target_column < current_column ? 'l' : 'r';
+    HyprlandAPI::invokeHyprctlCommand("dispatch", "workspace name:" + std::to_string(target_column));
     anim_type = '\0';
     return {};
 }
@@ -99,10 +99,10 @@ std::string get_workspace_in_direction(char direction)
     // NOTE: Only consider workspaces on the same monitor
 
     const std::string &current_workspace_name = g_pCompositor->m_lastMonitor->m_activeWorkspace->m_name;
-    int current_column_id = name_to_column(current_workspace_name);
-    int current_workspace_index = name_to_index(current_workspace_name);
+    int current_column = name_to_column(current_workspace_name);
+    int current_index = name_to_index(current_workspace_name);
 
-    int target_column_id = 0;
+    int target_column = 0;
     std::string target_workspace_name;
 
     switch (direction)
@@ -115,16 +115,16 @@ std::string get_workspace_in_direction(char direction)
 
             const auto &workspace = window->m_workspace;
             const std::string &workspace_name = workspace->m_name;
-            int workspace_column_id = name_to_column(workspace_name);
+            int workspace_column = name_to_column(workspace_name);
 
-            if (workspace_column_id < current_column_id && workspace_column_id > target_column_id)
+            if (workspace_column < current_column && workspace_column > target_column)
             {
-                target_column_id = workspace_column_id;
+                target_column = workspace_column;
                 target_workspace_name = workspace_name;
             }
         }
 
-        if (target_column_id == 0)
+        if (target_column == 0)
         {
             return "";
         }
@@ -133,7 +133,7 @@ std::string get_workspace_in_direction(char direction)
 
         break;
     case 'r':
-        target_column_id = INT_MAX;
+        target_column = INT_MAX;
         for (auto const &window : g_pCompositor->m_windowFocusHistory)
         {
             if (window->m_monitor->m_id != g_pCompositor->m_lastMonitor->m_id)
@@ -141,16 +141,16 @@ std::string get_workspace_in_direction(char direction)
 
             const auto &workspace = window->m_workspace;
             const std::string &workspace_name = workspace->m_name;
-            int workspace_column_id = name_to_column(workspace_name);
+            int workspace_column = name_to_column(workspace_name);
 
-            if (workspace_column_id > current_column_id && workspace_column_id < target_column_id)
+            if (workspace_column > current_column && workspace_column < target_column)
             {
-                target_column_id = workspace_column_id;
+                target_column = workspace_column;
                 target_workspace_name = workspace_name;
             }
         }
 
-        if (target_column_id == INT_MAX)
+        if (target_column == INT_MAX)
         {
             return "";
         }
@@ -159,13 +159,13 @@ std::string get_workspace_in_direction(char direction)
         break;
     case 'u':
         // if it is already the first workspace in the column, do nothing
-        if (current_workspace_index == 0)
+        if (current_index == 0)
             return "";
 
-        return get_workspace_name(current_column_id, current_workspace_index - 1);
+        return get_workspace_name(current_column, current_index - 1);
         break;
     case 'd':
-        return get_workspace_name(current_column_id, current_workspace_index + 1);
+        return get_workspace_name(current_column, current_index + 1);
         break;
     }
 
@@ -233,8 +233,11 @@ SDispatchResult dispatch_movefocus(std::string arg)
         anim_type = direction;
         if (found)
         {
+            // g_pCompositor->focusWindow(target_window.lock());
 
-            g_pCompositor->focusWindow(target_window.lock());
+            // Due to hide_special_on_workspace_change option, use hyprland's command instead
+            HyprlandAPI::invokeHyprctlCommand("dispatch", "focuswindow address:" +
+                                                              std::format("{:#x}", (uintptr_t)target_window.get()));
         }
         else
         {
@@ -297,20 +300,20 @@ SDispatchResult dispatch_movewindow(std::string arg)
 
 SDispatchResult dispatch_movetoworkspace(std::string arg)
 {
-    int target_column_id = name_to_column(arg);
+    int target_column = name_to_column(arg);
 
     const std::string &current_workspace_name = g_pCompositor->m_lastMonitor->m_activeWorkspace->m_name;
-    int current_column_id = name_to_column(current_workspace_name);
+    int current_column = name_to_column(current_workspace_name);
 
     for (auto const &window : g_pCompositor->m_windowFocusHistory)
     {
         const auto &workspace = window->m_workspace;
         const std::string &workspace_name = workspace->m_name;
-        int workspace_column_id = name_to_column(workspace_name);
+        int workspace_column = name_to_column(workspace_name);
 
-        if (workspace_column_id == target_column_id)
+        if (workspace_column == target_column)
         {
-            anim_type = workspace_column_id < current_column_id ? 'l' : 'r';
+            anim_type = workspace_column < current_column ? 'l' : 'r';
             HyprlandAPI::invokeHyprctlCommand("dispatch", "movetoworkspace name:" + workspace->m_name);
             anim_type = '\0';
             return {};
@@ -318,7 +321,7 @@ SDispatchResult dispatch_movetoworkspace(std::string arg)
     }
 
     // no window found on target workspace, simply switch to it
-    anim_type = target_column_id < current_column_id ? 'l' : 'r';
+    anim_type = target_column < current_column ? 'l' : 'r';
     HyprlandAPI::invokeHyprctlCommand("dispatch", "movetoworkspace name:" + arg);
     anim_type = '\0';
 
@@ -327,20 +330,20 @@ SDispatchResult dispatch_movetoworkspace(std::string arg)
 
 SDispatchResult dispatch_movetoworkspacesilent(std::string arg)
 {
-    int target_column_id = name_to_column(arg);
+    int target_column = name_to_column(arg);
 
     const std::string &current_workspace_name = g_pCompositor->m_lastMonitor->m_activeWorkspace->m_name;
-    int current_column_id = name_to_column(current_workspace_name);
+    int current_column = name_to_column(current_workspace_name);
 
     for (auto const &window : g_pCompositor->m_windowFocusHistory)
     {
         const auto &workspace = window->m_workspace;
         const std::string &workspace_name = workspace->m_name;
-        int workspace_column_id = name_to_column(workspace_name);
+        int workspace_column = name_to_column(workspace_name);
 
-        if (workspace_column_id == target_column_id)
+        if (workspace_column == target_column)
         {
-            anim_type = workspace_column_id < current_column_id ? 'l' : 'r';
+            anim_type = workspace_column < current_column ? 'l' : 'r';
             HyprlandAPI::invokeHyprctlCommand("dispatch", "movetoworkspacesilent name:" + workspace->m_name);
             anim_type = '\0';
             return {};
@@ -348,7 +351,7 @@ SDispatchResult dispatch_movetoworkspacesilent(std::string arg)
     }
 
     // no window found on target workspace, simply switch to it
-    anim_type = target_column_id < current_column_id ? 'l' : 'r';
+    anim_type = target_column < current_column ? 'l' : 'r';
     HyprlandAPI::invokeHyprctlCommand("dispatch", "movetoworkspacesilent name:" + arg);
     anim_type = '\0';
 
@@ -360,7 +363,7 @@ SDispatchResult dispatch_clearworkspaces(std::string arg)
     // check all the workspaces on this column
     // if there is empty ones, shrink others
     const std::string &current_workspace_name = g_pCompositor->m_lastMonitor->m_activeWorkspace->m_name;
-    int current_column_id = name_to_column(current_workspace_name);
+    int current_column = name_to_column(current_workspace_name);
 
     // pair of (name, id)
     // include id because hyprland needs id to rename workspace
@@ -372,8 +375,8 @@ SDispatchResult dispatch_clearworkspaces(std::string arg)
         if (workspace->m_name.starts_with("special"))
             continue;
 
-        int workspace_column_id = name_to_column(workspace->m_name);
-        if (workspace_column_id == current_column_id)
+        int workspace_column = name_to_column(workspace->m_name);
+        if (workspace_column == current_column)
         {
             workspaces_in_column.insert({workspace->m_name, workspace->m_id});
         }
@@ -384,7 +387,7 @@ SDispatchResult dispatch_clearworkspaces(std::string arg)
     int counter = 0;
     for (auto origin_workspace : workspaces_in_column)
     {
-        std::string target_workspace_name = get_workspace_name(current_column_id, counter);
+        std::string target_workspace_name = get_workspace_name(current_column, counter);
 
         if (origin_workspace.first == target_workspace_name)
         {
