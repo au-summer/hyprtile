@@ -50,11 +50,11 @@ SDispatchResult dispatch_workspace(std::string arg)
             const auto &workspace = window->m_workspace;
             const std::string &workspace_name = workspace->m_name;
 
-            // do not consider special workspaces
-            if (workspace_name.starts_with("special"))
-                continue;
-
             int workspace_column = name_to_column(workspace_name);
+
+            // special workspace, etc.
+            if (workspace_column == -1)
+                continue;
 
             if (workspace_column != current_column)
             {
@@ -78,6 +78,10 @@ SDispatchResult dispatch_workspace(std::string arg)
         const std::string &workspace_name = workspace->m_name;
         int workspace_column = name_to_column(workspace_name);
 
+        // special workspace, etc.
+        if (workspace_column == -1)
+            continue;
+
         if (workspace_column == target_column)
         {
             anim_type = workspace_column < current_column ? 'l' : 'r';
@@ -89,7 +93,7 @@ SDispatchResult dispatch_workspace(std::string arg)
 
     // no window found on target workspace, simply switch to it
     anim_type = target_column < current_column ? 'l' : 'r';
-    HyprlandAPI::invokeHyprctlCommand("dispatch", "workspace name:" + std::to_string(target_column));
+    HyprlandAPI::invokeHyprctlCommand("dispatch", "workspace name:" + get_workspace_name(target_column, 0));
     anim_type = '\0';
     return {};
 }
@@ -108,6 +112,7 @@ std::string get_workspace_in_direction(char direction)
     switch (direction)
     {
     case 'l':
+        target_column = 0;
         for (auto const &window : g_pCompositor->m_windowFocusHistory)
         {
             if (window->m_monitor->m_id != g_pCompositor->m_lastMonitor->m_id)
@@ -116,6 +121,10 @@ std::string get_workspace_in_direction(char direction)
             const auto &workspace = window->m_workspace;
             const std::string &workspace_name = workspace->m_name;
             int workspace_column = name_to_column(workspace_name);
+
+            // skip special workspaces
+            if (workspace_column == -1)
+                continue;
 
             if (workspace_column < current_column && workspace_column > target_column)
             {
@@ -142,6 +151,10 @@ std::string get_workspace_in_direction(char direction)
             const auto &workspace = window->m_workspace;
             const std::string &workspace_name = workspace->m_name;
             int workspace_column = name_to_column(workspace_name);
+
+            // skip special workspaces
+            if (workspace_column == -1)
+                continue;
 
             if (workspace_column > current_column && workspace_column < target_column)
             {
@@ -311,6 +324,10 @@ SDispatchResult dispatch_movetoworkspace(std::string arg)
         const std::string &workspace_name = workspace->m_name;
         int workspace_column = name_to_column(workspace_name);
 
+        // skip special workspaces
+        if (workspace_column == -1)
+            continue;
+
         if (workspace_column == target_column)
         {
             anim_type = workspace_column < current_column ? 'l' : 'r';
@@ -340,6 +357,10 @@ SDispatchResult dispatch_movetoworkspacesilent(std::string arg)
         const auto &workspace = window->m_workspace;
         const std::string &workspace_name = workspace->m_name;
         int workspace_column = name_to_column(workspace_name);
+
+        // skip special workspaces
+        if (workspace_column == -1)
+            continue;
 
         if (workspace_column == target_column)
         {
@@ -371,11 +392,12 @@ SDispatchResult dispatch_clearworkspaces(std::string arg)
 
     for (const auto &workspace : g_pCompositor->m_workspaces)
     {
-        // do not consider special workspaces
-        if (workspace->m_name.starts_with("special"))
+        int workspace_column = name_to_column(workspace->m_name);
+
+        // skip special workspaces
+        if (workspace_column == -1)
             continue;
 
-        int workspace_column = name_to_column(workspace->m_name);
         if (workspace_column == current_column)
         {
             workspaces_in_column.insert({workspace->m_name, workspace->m_id});
@@ -414,12 +436,12 @@ SDispatchResult dispatch_insertworkspace(std::string arg)
 
     for (const auto &workspace : g_pCompositor->m_workspaces)
     {
-        // do not consider special workspaces
-        if (workspace->m_name.starts_with("special"))
-            continue;
-
         int workspace_column = name_to_column(workspace->m_name);
         int workspace_index = name_to_index(workspace->m_name);
+
+        // skip special workspaces
+        if (workspace_column == -1)
+            continue;
 
         if (workspace_column == current_column && workspace_index >= current_index)
         {
@@ -462,6 +484,10 @@ SDispatchResult dispatch_movecurrentworkspacetomonitor(std::string arg)
             continue;
 
         const auto workspace_column = name_to_column(workspace->m_name);
+
+        // skip special workspaces
+        if (workspace_column == -1)
+            continue;
 
         // if (workspace_column == current_column)
         if (workspace->m_name != current_workspace_name && workspace_column == current_column)
