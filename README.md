@@ -29,7 +29,10 @@ The idea is that each workspace is a column, with each workspace being a tile in
 
 ## Roadmap
 
-- [] Overview mechanism using Plugin/AGS/Quickshell/...
-- [] Hyprpanel, Quickshell, etc. support
-- [] Maintain a data structure of window-workspace mapping by the plugin itself, instead of relying on Hyprland's internal data structures
-- [] Dispatch workspace to same column from empty should have vertical animation
+- [x] Rewriting into plugin
+- [x] Name-based instead of id-based management
+- [x] Natural waybar sorting support
+- [ ] Overview mechanism using Plugin/AGS/Quickshell/...
+- [ ] Hyprpanel, Quickshell, etc. support
+- [ ] Maintain a data structure of window-workspace mapping by the plugin itself, instead of relying on Hyprland's internal data structures
+- [ ] Dispatch workspace to same column from empty should have vertical animation
