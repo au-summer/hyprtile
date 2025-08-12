@@ -8,6 +8,13 @@ This plugin makes Hyprland's not only windows, but also workspaces tile with eac
 
 The idea is that each workspace is a column, with each workspace being a tile in that column. The columns are arranged horizontally, and the workspaces in each column are arranged vertically. This allows for a more flexible and logical management of windows and workspaces.
 
+## Installation
+
+1. Clone the repository
+1. Build the plugin using `make`
+1. Run `hyprctl plugin load /path/to/hyprtile.so`
+1. Set `"sort-by": "name"` in `"hyprland/workspaces"` waybar setting
+
 ## Dispatchers
 
 - `hyprtile:workspace number` - Switch to the last focused workspace on that column.
@@ -19,3 +26,10 @@ The idea is that each workspace is a column, with each workspace being a tile in
 - `hyprtile:insertworkspace` - Insert a new workspace on the current column, and push all workspaces below by one.
 - `hyprtile:movecurrentworkspacetomonitor l/r/u/d` - Move the current column to the next monitor in the specified direction. (The name is kept for compatibility with hyprland)
 - `hyprtile:movefocustomonitor l/r/u/d` - Move focus to the next monitor in the specified direction.
+
+## Roadmap
+
+- [] Overview mechanism using Plugin/AGS/Quickshell/...
+- [] Hyprpanel, Quickshell, etc. support
+- [] Maintain a data structure of window-workspace mapping by the plugin itself, instead of relying on Hyprland's internal data structures
+- [] Dispatch workspace to same column from empty should have vertical animation
