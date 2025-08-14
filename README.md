@@ -1,12 +1,14 @@
-A plugin that implements real tiling mechanism for Hyprland.
+# Hyprtile
 
----
-
-This plugin makes Hyprland's not only windows, but also workspaces tile with each other.
+This plugin makes Hyprland not only tile windows, but also tile workspaces with each other.
 
 ## Idea
 
 The idea is that each workspace is a column, with each workspace being a tile in that column. The columns are arranged horizontally, and the workspaces in each column are arranged vertically. This allows for a more flexible and logical management of windows and workspaces.
+
+# Demo
+
+(TODO)
 
 ## Installation
 
@@ -14,6 +16,8 @@ The idea is that each workspace is a column, with each workspace being a tile in
 1. Build the plugin using `make`
 1. Run `hyprctl plugin load /path/to/hyprtile.so`
 1. Set `"sort-by": "name"` in `"hyprland/workspaces"` waybar setting
+
+> Note: If when loading the plugin you get an error `[hyprtile] Version mismatch`, install the Hyprland headers that fits your Hyprland version. You can install them by cloning the official Hyprland repository, checkout to your corresponding version's commit, and run `sudo make installheaders`.
 
 ## Dispatchers
 
@@ -30,9 +34,10 @@ The idea is that each workspace is a column, with each workspace being a tile in
 ## Roadmap
 
 - [x] Rewriting into plugin
+  - [ ] Dispatcher for moving the current workspace around the column
+  - [ ] Dispatch workspace to same column from empty should have vertical animation
+  - [ ] Maintain a data structure of window-workspace mapping by the plugin itself, instead of relying on Hyprland's internal data structures
 - [x] Name-based instead of id-based management
 - [x] Natural waybar sorting support
 - [ ] Overview mechanism using Plugin/AGS/Quickshell/...
 - [ ] Hyprpanel, Quickshell, etc. support
-- [ ] Maintain a data structure of window-workspace mapping by the plugin itself, instead of relying on Hyprland's internal data structures
-- [ ] Dispatch workspace to same column from empty should have vertical animation
