@@ -219,24 +219,39 @@ SDispatchResult dispatch_movefocus(std::string arg)
 
             if (window_workspace_name == target_workspace_name)
             {
-                switch (direction)
+                // If the window is fullscreen, we want to focus it
+                if (window->isFullscreen())
                 {
-                case 'l':
-                    if (!found || window->m_position.x > target_window->m_position.x)
-                        target_window = window;
+                    target_window = window;
+                    found = true;
                     break;
-                case 'r':
-                    if (!found || window->m_position.x < target_window->m_position.x)
-                        target_window = window;
-                    break;
-                case 'u':
-                    if (!found || window->m_position.y > target_window->m_position.y)
-                        target_window = window;
-                    break;
-                case 'd':
-                    if (!found || window->m_position.y < target_window->m_position.y)
-                        target_window = window;
-                    break;
+                }
+
+                if (!found)
+                {
+                    target_window = window;
+                }
+                else
+                {
+                    switch (direction)
+                    {
+                    case 'l':
+                        if (window->m_position.x > target_window->m_position.x)
+                            target_window = window;
+                        break;
+                    case 'r':
+                        if (window->m_position.x < target_window->m_position.x)
+                            target_window = window;
+                        break;
+                    case 'u':
+                        if (window->m_position.y > target_window->m_position.y)
+                            target_window = window;
+                        break;
+                    case 'd':
+                        if (window->m_position.y < target_window->m_position.y)
+                            target_window = window;
+                        break;
+                    }
                 }
 
                 found = true;
@@ -468,6 +483,56 @@ SDispatchResult dispatch_insertworkspace(std::string arg)
     return {};
 }
 
+SDispatchResult dispatch_moveworkspace(std::string arg)
+{
+    char direction = parse_move_arg(arg);
+    // relative index
+    int dy = 0;
+    if (direction == 'u')
+    {
+        dy = -1;
+    }
+    else if (direction == 'd')
+    {
+        dy = 1;
+    }
+    else
+    {
+        return {.success = false, .error = "Invalid direction for moveworkspace"};
+    }
+
+    auto current_workspace_id = g_pCompositor->m_lastMonitor->m_activeWorkspace->m_id;
+
+    // not a reference because it can be modified later
+    const std::string current_workspace_name = g_pCompositor->m_lastMonitor->m_activeWorkspace->m_name;
+    int current_column = name_to_column(current_workspace_name);
+    int current_index = name_to_index(current_workspace_name);
+
+    for (const auto &workspace : g_pCompositor->m_workspaces)
+    {
+        int workspace_column = name_to_column(workspace->m_name);
+        int workspace_index = name_to_index(workspace->m_name);
+
+        // skip special workspaces
+        if (workspace_column == -1)
+            continue;
+
+        if (workspace_column == current_column && workspace_index == current_index + dy)
+        {
+
+            // swap the name
+            HyprlandAPI::invokeHyprctlCommand("dispatch", "renameworkspace " + std::to_string(current_workspace_id) +
+                                                              " " + workspace->m_name);
+
+            HyprlandAPI::invokeHyprctlCommand("dispatch", "renameworkspace " + std::to_string(workspace->m_id) + " " +
+                                                              current_workspace_name);
+            return {};
+        }
+    }
+
+    return {};
+}
+
 SDispatchResult dispatch_movecurrentworkspacetomonitor(std::string arg)
 {
     char direction = parse_move_arg(arg);
@@ -526,6 +591,7 @@ void addDispatchers()
     HyprlandAPI::addDispatcherV2(PHANDLE, "hyprtile:movetoworkspacesilent", dispatch_movetoworkspacesilent);
     HyprlandAPI::addDispatcherV2(PHANDLE, "hyprtile:clearworkspaces", dispatch_clearworkspaces);
     HyprlandAPI::addDispatcherV2(PHANDLE, "hyprtile:insertworkspace", dispatch_insertworkspace);
+    HyprlandAPI::addDispatcherV2(PHANDLE, "hyprtile:moveworkspace", dispatch_moveworkspace);
     HyprlandAPI::addDispatcherV2(PHANDLE, "hyprtile:movecurrentworkspacetomonitor",
                                  dispatch_movecurrentworkspacetomonitor);
     HyprlandAPI::addDispatcherV2(PHANDLE, "hyprtile:movefocustomonitor", dispatch_movefocustomonitor);
