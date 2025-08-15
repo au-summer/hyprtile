@@ -34,7 +34,9 @@ The idea is that each workspace is a column, with each workspace being a tile in
 ## Roadmap
 
 - [x] Rewriting into plugin
-  - [ ] Dispatcher for moving the current workspace around the column
+  - [ ] Code Refactoring
+  - [x] Dispatcher for moving the current workspace around the column
+  - [ ] Dispatcher for moving the current workspace to other columns
   - [ ] Dispatch workspace to same column from empty should have vertical animation
   - [ ] Maintain a data structure of window-workspace mapping by the plugin itself, instead of relying on Hyprland's internal data structures
 - [x] Name-based instead of id-based management
