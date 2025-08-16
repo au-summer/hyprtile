@@ -519,13 +519,24 @@ SDispatchResult dispatch_moveworkspace(std::string arg)
 
         if (workspace_column == current_column && workspace_index == current_index + dy)
         {
+            std::string target_workspace_name = workspace->m_name;
+
+            // for animation puspose, first switch to that workspace
+            anim_type = direction;
+            HyprlandAPI::invokeHyprctlCommand("dispatch", "workspace name:" + target_workspace_name);
 
             // swap the name
             HyprlandAPI::invokeHyprctlCommand("dispatch", "renameworkspace " + std::to_string(current_workspace_id) +
-                                                              " " + workspace->m_name);
+                                                              " " + target_workspace_name);
 
             HyprlandAPI::invokeHyprctlCommand("dispatch", "renameworkspace " + std::to_string(workspace->m_id) + " " +
                                                               current_workspace_name);
+
+            // switch back to the current workspace
+            // which is now renamed to target_workspace_name!
+            HyprlandAPI::invokeHyprctlCommand("dispatch", "workspace name:" + target_workspace_name);
+            anim_type = '\0';
+
             return {};
         }
     }
