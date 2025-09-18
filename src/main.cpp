@@ -1,7 +1,11 @@
 #include <hyprland/src/Compositor.hpp>
+#include <hyprland/src/helpers/Monitor.hpp>
+#include <hyprland/src/managers/animation/DesktopAnimationManager.hpp>
 #include <hyprland/src/plugins/PluginAPI.hpp>
+#include <hyprutils/animation/AnimatedVariable.hpp>
 
 #include "dispatchers.h"
+#include "utils.h"
 
 HANDLE PHANDLE = nullptr;
 
@@ -10,14 +14,57 @@ APICALL EXPORT std::string PLUGIN_API_VERSION()
     return HYPRLAND_API_VERSION;
 }
 
-inline CFunctionHook *g_pStartAnimHook = nullptr;
-typedef void (*origStartAnim)(CWorkspace *, bool, bool, bool);
-void hk_startAnim(CWorkspace *thisptr, bool in, bool left, bool instant)
-{
-    auto config = thisptr->m_alpha->getConfig();
-    auto &style = config->pValues->internalStyle;
+char anim_type = '\0';
 
-    // For reset purpose
+inline CFunctionHook *g_pChangeWorkspaceHook = nullptr;
+typedef void (*origChangeWorkspace)(CMonitor *, const PHLWORKSPACE &, bool, bool, bool);
+void hk_changeWorkspace(CMonitor *thisptr, const PHLWORKSPACE &pWorkspace, bool internal, bool noMouseMove,
+                        bool noFocus)
+{
+    const std::string &current_workspace_name = thisptr->m_activeWorkspace->m_name;
+    const std::string &target_workspace_name = pWorkspace->m_name;
+
+    int current_column = name_to_column(current_workspace_name);
+    int current_index = name_to_index(current_workspace_name);
+    int target_column = name_to_column(target_workspace_name);
+    int target_index = name_to_index(target_workspace_name);
+
+    if (current_column == target_column)
+    {
+        if (current_index < target_index)
+        {
+            anim_type = 'd';
+        }
+        else
+        {
+            anim_type = 'u';
+        }
+    }
+    else
+    {
+        if (current_column < target_column)
+        {
+            anim_type = 'r';
+        }
+        else
+        {
+            anim_type = 'l';
+        }
+    }
+
+    (*(origChangeWorkspace)g_pChangeWorkspaceHook->m_original)(thisptr, pWorkspace, internal, noMouseMove, noFocus);
+
+    anim_type = '\0';
+}
+
+inline CFunctionHook *g_pStartAnimationHook = nullptr;
+typedef void (*origStartAnimation)(CDesktopAnimationManager *, PHLWORKSPACE, CDesktopAnimationManager::eAnimationType,
+                                   bool, bool);
+void hk_startAnimation(CDesktopAnimationManager *thisptr, PHLWORKSPACE ws,
+                       CDesktopAnimationManager::eAnimationType type, bool left, bool instant)
+{
+    auto config = ws->m_alpha->getConfig();
+    auto &style = config->pValues->internalStyle;
     auto original_style = config->pValues->internalStyle;
 
     switch (anim_type)
@@ -38,15 +85,10 @@ void hk_startAnim(CWorkspace *thisptr, bool in, bool left, bool instant)
         left = true;
         style = "slidevert";
         break;
-    // fade
-    case 'f':
-        style = "fade";
-        break;
     }
 
-    (*(origStartAnim)g_pStartAnimHook->m_original)(thisptr, in, left, instant);
+    (*(origStartAnimation)g_pStartAnimationHook->m_original)(thisptr, ws, type, left, instant);
 
-    // Reset the style to original after the animation
     style = original_style;
 }
 
@@ -66,9 +108,15 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle)
     }
 
     // Function Hooks
-    static const auto START_ANIM = HyprlandAPI::findFunctionsByName(PHANDLE, "startAnim");
-    g_pStartAnimHook = HyprlandAPI::createFunctionHook(PHANDLE, START_ANIM[0].address, (void *)&hk_startAnim);
-    g_pStartAnimHook->hook();
+    static const auto CHANGE_WORKSPACE = HyprlandAPI::findFunctionsByName(PHANDLE, "changeWorkspace");
+    g_pChangeWorkspaceHook =
+        HyprlandAPI::createFunctionHook(PHANDLE, CHANGE_WORKSPACE[1].address, (void *)&hk_changeWorkspace);
+    g_pChangeWorkspaceHook->hook();
+
+    static const auto START_ANIMATION = HyprlandAPI::findFunctionsByName(PHANDLE, "startAnimation");
+    g_pStartAnimationHook =
+        HyprlandAPI::createFunctionHook(PHANDLE, START_ANIMATION[0].address, (void *)&hk_startAnimation);
+    g_pStartAnimationHook->hook();
 
     // Dispatchers
     dispatchers::addDispatchers();
