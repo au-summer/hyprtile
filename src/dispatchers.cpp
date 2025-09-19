@@ -299,9 +299,24 @@ SDispatchResult dispatch_movewindow(std::string arg)
 
     if (PLASTWINDOW->m_isFloating)
     {
-        // cannot handle it, go to hyprland solution
-        HyprlandAPI::invokeHyprctlCommand("dispatch", "movewindow " + arg);
-        return {};
+        // check if the window is on the edge
+        const auto &pos = PLASTWINDOW->m_realPosition;
+        const auto &posX = pos->goal().x;
+        const auto &posY = pos->goal().y;
+
+        const auto &size = PLASTWINDOW->m_realSize;
+        const auto &sizeX = size->goal().x;
+        const auto &sizeY = size->goal().y;
+
+        const auto &mon_size = PLASTWINDOW->m_monitor->m_size;
+
+        if (!((posX <= 0 && direction == 'l') || (posX + sizeX >= mon_size.x && direction == 'r') ||
+              (posY <= 0 && direction == 'u') || (posY + sizeY >= mon_size.y && direction == 'd')))
+        {
+            // cannot handle it, go to hyprland solution
+            HyprlandAPI::invokeHyprctlCommand("dispatch", "movewindow " + arg);
+            return {};
+        }
     }
 
     const auto PWINDOWTOCHANGETO = g_pCompositor->getWindowInDirection(PLASTWINDOW, direction);
