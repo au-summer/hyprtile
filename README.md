@@ -35,11 +35,12 @@ The idea is that each workspace is a column, with each workspace being a tile in
 
 - [x] Rewriting into plugin
   - [ ] Code Refactoring
+  - [x] General animation control
   - [x] Dispatcher for moving the current workspace around the column
   - [ ] Dispatcher for moving the current workspace to other columns
-  - [ ] Dispatch workspace to same column from empty should have vertical animation
+  - [ ] Moving windows to adjacent workspaces should move to edge
+  - [ ] Gesture support
   - [ ] Maintain a data structure of window-workspace mapping by the plugin itself, instead of relying on Hyprland's internal data structures
 - [x] Name-based instead of id-based management
 - [x] Natural waybar sorting support
 - [ ] Overview mechanism using Plugin/AGS/Quickshell/...
-- [ ] Hyprpanel, Quickshell, etc. support
