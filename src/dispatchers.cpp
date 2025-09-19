@@ -198,8 +198,32 @@ SDispatchResult dispatch_movefocus(std::string arg)
         // Found window in direction and on same workspace, switch to it
         if (PWINDOWTOCHANGETO && PWINDOWTOCHANGETO->m_workspace->m_id == PLASTWINDOW->m_workspace->m_id)
         {
-            g_pCompositor->focusWindow(PWINDOWTOCHANGETO);
-            return {};
+            // special condition: both windows are floating
+            // TODO: getWindowInDirection behaves weird when focusing up with floating windows
+            bool use_hyprland = true;
+            if (PLASTWINDOW->m_isFloating && PWINDOWTOCHANGETO->m_isFloating)
+            {
+                const auto &old_pos = PLASTWINDOW->m_realPosition;
+                const auto &old_size = PLASTWINDOW->m_realSize;
+                const auto &new_pos = PWINDOWTOCHANGETO->m_realPosition;
+                const auto &new_size = PWINDOWTOCHANGETO->m_realSize;
+
+                if ((direction == 'l' && new_pos->goal().x >= old_pos->goal().x) ||
+                    (direction == 'r' &&
+                     new_pos->goal().x + new_size->goal().x <= old_pos->goal().x + old_size->goal().x) ||
+                    (direction == 'u' && new_pos->goal().y >= old_pos->goal().y) ||
+                    (direction == 'd' &&
+                     new_pos->goal().y + new_size->goal().y <= old_pos->goal().y + old_size->goal().y))
+                {
+                    use_hyprland = false;
+                }
+            }
+
+            if (use_hyprland)
+            {
+                g_pCompositor->focusWindow(PWINDOWTOCHANGETO);
+                return {};
+            }
         }
     }
 
@@ -300,18 +324,20 @@ SDispatchResult dispatch_movewindow(std::string arg)
     if (PLASTWINDOW->m_isFloating)
     {
         // check if the window is on the edge
-        const auto &pos = PLASTWINDOW->m_realPosition;
-        const auto &posX = pos->goal().x;
-        const auto &posY = pos->goal().y;
+        const auto &pos = PLASTWINDOW->m_realPosition->goal();
+        // const auto &posX = pos->goal().x;
+        // const auto &posY = pos->goal().y;
 
-        const auto &size = PLASTWINDOW->m_realSize;
-        const auto &sizeX = size->goal().x;
-        const auto &sizeY = size->goal().y;
+        const auto &size = PLASTWINDOW->m_realSize->goal();
+        // const auto &sizeX = size->goal().x;
+        // const auto &sizeY = size->goal().y;
 
         const auto &mon_size = PLASTWINDOW->m_monitor->m_size;
 
-        if (!((posX <= 0 && direction == 'l') || (posX + sizeX >= mon_size.x && direction == 'r') ||
-              (posY <= 0 && direction == 'u') || (posY + sizeY >= mon_size.y && direction == 'd')))
+        // if (!((posX <= 0 && direction == 'l') || (posX + sizeX >= mon_size.x && direction == 'r') ||
+        //       (posY <= 0 && direction == 'u') || (posY + sizeY >= mon_size.y && direction == 'd')))
+        if (!((pos.x <= 0 && direction == 'l') || (pos.x + size.x >= mon_size.x && direction == 'r') ||
+              (pos.y <= 0 && direction == 'u') || (pos.y + size.y >= mon_size.y && direction == 'd')))
         {
             // cannot handle it, go to hyprland solution
             HyprlandAPI::invokeHyprctlCommand("dispatch", "movewindow " + arg);
