@@ -16,6 +16,8 @@ extern HANDLE PHANDLE;
 
 // char anim_type = '\0';
 
+bool focus_mode = false;
+
 namespace dispatchers
 {
 
@@ -35,6 +37,11 @@ char parse_move_arg(const std::string &arg)
 
 SDispatchResult dispatch_workspace(std::string arg)
 {
+    if (focus_mode)
+    {
+        return {.success = false, .error = "Focus mode is enabled"};
+    }
+
     const std::string &current_workspace_name = g_pCompositor->m_lastMonitor->m_activeWorkspace->m_name;
     int current_column = name_to_column(current_workspace_name);
 
@@ -229,6 +236,11 @@ SDispatchResult dispatch_movefocus(std::string arg)
 
     // No window in direction
 
+    if (focus_mode && (direction == 'l' || direction == 'r'))
+    {
+        return {.success = false, .error = "Focus mode is enabled"};
+    }
+
     std::string target_workspace_name = get_workspace_in_direction(direction);
 
     if (!target_workspace_name.empty())
@@ -354,6 +366,11 @@ SDispatchResult dispatch_movewindow(std::string arg)
         return {};
     }
 
+    if (focus_mode)
+    {
+        return {.success = false, .error = "Focus mode is enabled"};
+    }
+
     std::string target_workspace_name = get_workspace_in_direction(direction);
     if (!target_workspace_name.empty())
     {
@@ -368,6 +385,11 @@ SDispatchResult dispatch_movewindow(std::string arg)
 
 SDispatchResult dispatch_movetoworkspace(std::string arg)
 {
+    if (focus_mode)
+    {
+        return {.success = false, .error = "Focus mode is enabled"};
+    }
+
     int target_column = name_to_column(arg);
 
     const std::string &current_workspace_name = g_pCompositor->m_lastMonitor->m_activeWorkspace->m_name;
@@ -622,6 +644,11 @@ SDispatchResult dispatch_movecurrentcolumntomonitor(std::string arg)
 
 SDispatchResult dispatch_movefocustomonitor(std::string arg)
 {
+    if (focus_mode)
+    {
+        return {.success = false, .error = "Focus mode is enabled"};
+    }
+
     char direction = parse_move_arg(arg);
 
     const auto target_monitor = g_pCompositor->getMonitorInDirection(direction);
@@ -631,6 +658,12 @@ SDispatchResult dispatch_movefocustomonitor(std::string arg)
         HyprlandAPI::invokeHyprctlCommand("dispatch", "workspace name:" + target_monitor->m_activeWorkspace->m_name);
     }
 
+    return {};
+}
+
+SDispatchResult dispatch_togglefocusmode(std::string arg)
+{
+    focus_mode = !focus_mode;
     return {};
 }
 
@@ -646,6 +679,7 @@ void addDispatchers()
     HyprlandAPI::addDispatcherV2(PHANDLE, "hyprtile:moveworkspace", dispatch_moveworkspace);
     HyprlandAPI::addDispatcherV2(PHANDLE, "hyprtile:movecurrentcolumntomonitor", dispatch_movecurrentcolumntomonitor);
     HyprlandAPI::addDispatcherV2(PHANDLE, "hyprtile:movefocustomonitor", dispatch_movefocustomonitor);
+    HyprlandAPI::addDispatcherV2(PHANDLE, "hyprtile:togglefocusmode", dispatch_togglefocusmode);
 }
 
 } // namespace dispatchers
