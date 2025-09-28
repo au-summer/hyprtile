@@ -94,24 +94,24 @@ void hk_startAnimation(CDesktopAnimationManager *thisptr, PHLWORKSPACE ws,
     style = original_style;
 }
 
-inline CFunctionHook *g_pFindAvailableDefaultWSHook = nullptr;
-typedef WORKSPACEID (*origFindAvailableDefaultWS)(CMonitor *);
-WORKSPACEID hk_findAvailableDefaultWS(CMonitor *thisptr)
-{
-    // Since there are only few workspaces, brute force
-    for (WORKSPACEID i = 1; i < LONG_MAX; ++i)
-    {
-        for (const auto &workspace : g_pCompositor->getWorkspaces())
-        {
-            int column = name_to_column(workspace->m_name);
-
-            if (i != column)
-                return i;
-        }
-    }
-
-    return LONG_MAX;
-}
+// inline CFunctionHook *g_pFindAvailableDefaultWSHook = nullptr;
+// typedef WORKSPACEID (*origFindAvailableDefaultWS)(CMonitor *);
+// WORKSPACEID hk_findAvailableDefaultWS(CMonitor *thisptr)
+// {
+//     // Since there are only few workspaces, brute force
+//     for (WORKSPACEID i = 1; i < LONG_MAX; ++i)
+//     {
+//         for (const auto &workspace : g_pCompositor->getWorkspaces())
+//         {
+//             int column = name_to_column(workspace->m_name);
+//
+//             if (i != column)
+//                 return i;
+//         }
+//     }
+//
+//     return LONG_MAX;
+// }
 
 APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle)
 {
@@ -139,10 +139,11 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle)
         HyprlandAPI::createFunctionHook(PHANDLE, START_ANIMATION[0].address, (void *)&hk_startAnimation);
     g_pStartAnimationHook->hook();
 
-    static const auto FIND_AVAILABLE_DEFAULT_WS = HyprlandAPI::findFunctionsByName(PHANDLE, "findAvailableDefaultWS");
-    g_pFindAvailableDefaultWSHook = HyprlandAPI::createFunctionHook(PHANDLE, FIND_AVAILABLE_DEFAULT_WS[0].address,
-                                                                    (void *)&hk_findAvailableDefaultWS);
-    g_pFindAvailableDefaultWSHook->hook();
+    // static const auto FIND_AVAILABLE_DEFAULT_WS = HyprlandAPI::findFunctionsByName(PHANDLE,
+    // "findAvailableDefaultWS"); g_pFindAvailableDefaultWSHook = HyprlandAPI::createFunctionHook(PHANDLE,
+    // FIND_AVAILABLE_DEFAULT_WS[0].address,
+    //                                                                 (void *)&hk_findAvailableDefaultWS);
+    // g_pFindAvailableDefaultWSHook->hook();
 
     // Dispatchers
     dispatchers::addDispatchers();
