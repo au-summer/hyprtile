@@ -39,7 +39,8 @@ The idea is that each workspace is a column, with each workspace being a tile in
   - [x] Dispatcher for moving the current workspace around the column
   - [ ] Dispatcher for moving the current workspace to other columns
   - [ ] Moving windows to adjacent workspaces should move to edge
-  - [ ] Gesture support
 - [x] Name-based instead of id-based management
 - [x] Natural waybar sorting support
 - [x] Overview mode
+  - [ ] Overview for multiple monitors
+- [ ] Gesture support
