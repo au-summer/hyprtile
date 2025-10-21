@@ -4,8 +4,8 @@
 
 #include <string>
 
-// extern char anim_type;
 extern bool focus_mode;
+extern bool renderingOverview;
 
 namespace dispatchers
 {
@@ -21,4 +21,5 @@ SDispatchResult dispatch_moveworkspace(std::string arg);
 SDispatchResult dispatch_movecurrentcolumntomonitor(std::string arg);
 SDispatchResult dispatch_movefocustomonitor(std::string arg);
 SDispatchResult dispatch_togglefocusmode(std::string arg);
+SDispatchResult onExpoDispatcher(std::string arg);
 } // namespace dispatchers

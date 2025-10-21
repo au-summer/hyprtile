@@ -1,15 +1,22 @@
 #include <hyprland/src/Compositor.hpp>
+#include <hyprland/src/config/ConfigManager.hpp>
+#include <hyprland/src/desktop/DesktopTypes.hpp>
+#include <hyprland/src/desktop/Window.hpp>
 #include <hyprland/src/helpers/Monitor.hpp>
 #include <hyprland/src/managers/animation/DesktopAnimationManager.hpp>
 #include <hyprland/src/plugins/PluginAPI.hpp>
+#include <hyprland/src/render/Renderer.hpp>
 #include <hyprutils/animation/AnimatedVariable.hpp>
 
 #include "dispatchers.h"
 #include "utils.h"
 
+#include "globals.h"
+#include "overview.h"
+
 #include <limits>
 
-HANDLE PHANDLE = nullptr;
+// HANDLE PHANDLE = nullptr;
 
 APICALL EXPORT std::string PLUGIN_API_VERSION()
 {
@@ -17,6 +24,8 @@ APICALL EXPORT std::string PLUGIN_API_VERSION()
 }
 
 char anim_type = '\0';
+
+static bool g_unloading = false;
 
 inline CFunctionHook *g_pChangeWorkspaceHook = nullptr;
 typedef void (*origChangeWorkspace)(CMonitor *, const PHLWORKSPACE &, bool, bool, bool);
@@ -120,6 +129,17 @@ WORKSPACEID hk_findAvailableDefaultWS(CMonitor *thisptr)
     return LONG_MAX;
 }
 
+inline CFunctionHook *g_pRenderWorkspaceHook = nullptr;
+typedef void (*origRenderWorkspace)(void *, PHLMONITOR, PHLWORKSPACE, timespec *, const CBox &);
+static void hkRenderWorkspace(void *thisptr, PHLMONITOR pMonitor, PHLWORKSPACE pWorkspace, timespec *now,
+                              const CBox &geometry)
+{
+    if (!g_pOverview || renderingOverview || g_pOverview->blockOverviewRendering || g_pOverview->pMonitor != pMonitor)
+        ((origRenderWorkspace)(g_pRenderWorkspaceHook->m_original))(thisptr, pMonitor, pWorkspace, now, geometry);
+    else
+        g_pOverview->render();
+}
+
 APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle)
 {
     PHANDLE = handle;
@@ -151,8 +171,31 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle)
                                                                     (void *)&hk_findAvailableDefaultWS);
     g_pFindAvailableDefaultWSHook->hook();
 
+    auto FNS = HyprlandAPI::findFunctionsByName(PHANDLE, "renderWorkspace");
+    g_pRenderWorkspaceHook = HyprlandAPI::createFunctionHook(PHANDLE, FNS[0].address, (void *)hkRenderWorkspace);
+    g_pRenderWorkspaceHook->hook();
+
+    static auto P =
+        HyprlandAPI::registerCallbackDynamic(PHANDLE, "preRender", [](void *self, SCallbackInfo &info, std::any param) {
+            if (!g_pOverview)
+                return;
+            g_pOverview->onPreRender();
+        });
+
     // Dispatchers
     dispatchers::addDispatchers();
 
+    // Configuration values
+    HyprlandAPI::addConfigValue(PHANDLE, "plugin:hyprtileexpo:gap_size", Hyprlang::INT{10});
+    HyprlandAPI::addConfigValue(PHANDLE, "plugin:hyprtileexpo:bg_col", Hyprlang::INT{0xFF111111});
+
+    HyprlandAPI::reloadConfig();
+
     return {"hyprtile", "tiled workspace management", "ausummer", "1.0"};
+}
+
+APICALL EXPORT void PLUGIN_EXIT()
+{
+    g_pHyprRenderer->m_renderPass.removeAllOfType("COverviewPassElement");
+    g_unloading = true;
 }

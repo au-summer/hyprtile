@@ -1,4 +1,5 @@
 #include "dispatchers.h"
+#include "overview.h"
 
 #include <climits>
 #include <hyprland/src/Compositor.hpp>
@@ -10,12 +11,10 @@
 #include <hyprland/src/plugins/PluginAPI.hpp>
 #include <string>
 
+#include "globals.h"
 #include "utils.h"
 
-extern HANDLE PHANDLE;
-
-// char anim_type = '\0';
-
+bool renderingOverview = false;
 bool focus_mode = false;
 
 namespace dispatchers
@@ -667,6 +666,38 @@ SDispatchResult dispatch_togglefocusmode(std::string arg)
     return {};
 }
 
+SDispatchResult onExpoDispatcher(std::string arg)
+{
+    if (arg == "toggle")
+    {
+        if (g_pOverview)
+            g_pOverview->close();
+        else
+        {
+            renderingOverview = true;
+            g_pOverview = std::make_unique<COverview>(g_pCompositor->m_lastMonitor->m_activeWorkspace);
+            renderingOverview = false;
+        }
+        return {};
+    }
+
+    if (arg == "off" || arg == "close" || arg == "disable")
+    {
+        if (g_pOverview)
+            g_pOverview->close();
+        return {};
+    }
+
+    // Default: open overview
+    if (g_pOverview)
+        return {};
+
+    renderingOverview = true;
+    g_pOverview = std::make_unique<COverview>(g_pCompositor->m_lastMonitor->m_activeWorkspace);
+    renderingOverview = false;
+    return {};
+}
+
 void addDispatchers()
 {
     HyprlandAPI::addDispatcherV2(PHANDLE, "hyprtile:workspace", dispatch_workspace);
@@ -680,6 +711,7 @@ void addDispatchers()
     HyprlandAPI::addDispatcherV2(PHANDLE, "hyprtile:movecurrentcolumntomonitor", dispatch_movecurrentcolumntomonitor);
     HyprlandAPI::addDispatcherV2(PHANDLE, "hyprtile:movefocustomonitor", dispatch_movefocustomonitor);
     HyprlandAPI::addDispatcherV2(PHANDLE, "hyprtile:togglefocusmode", dispatch_togglefocusmode);
+    HyprlandAPI::addDispatcherV2(PHANDLE, "hyprtile:expo", onExpoDispatcher);
 }
 
 } // namespace dispatchers
