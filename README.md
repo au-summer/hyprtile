@@ -30,17 +30,16 @@ The idea is that each workspace is a column, with each workspace being a tile in
 - `hyprtile:insertworkspace` - Insert a new workspace on the current column, and push all workspaces below by one.
 - `hyprtile:movecurrentworkspacetomonitor l/r/u/d` - Move the current column to the next monitor in the specified direction. (The name is kept for compatibility with hyprland)
 - `hyprtile:movefocustomonitor l/r/u/d` - Move focus to the next monitor in the specified direction.
+- `hyprtile:expo toggle/on/off` - Toggle the overview mode, showing all workspaces in a grid.
 
 ## Roadmap
 
 - [x] Rewriting into plugin
-  - [ ] Code Refactoring
   - [x] General animation control
   - [x] Dispatcher for moving the current workspace around the column
   - [ ] Dispatcher for moving the current workspace to other columns
   - [ ] Moving windows to adjacent workspaces should move to edge
   - [ ] Gesture support
-  - [ ] Maintain a data structure of window-workspace mapping by the plugin itself, instead of relying on Hyprland's internal data structures
 - [x] Name-based instead of id-based management
 - [x] Natural waybar sorting support
-- [ ] Overview mechanism using Plugin/AGS/Quickshell/...
+- [x] Overview mode
