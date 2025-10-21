@@ -204,8 +204,8 @@ void COverview::collectWorkspaces()
     for (const auto &ws : g_pCompositor->getWorkspaces())
     {
         // Skip workspaces on other monitors
-        if (ws->m_monitor != pMonitor->m_id)
-            continue;
+        // if (ws->m_monitor != pMonitor->m_id)
+        //     continue;
 
         // Parse workspace name
         int col = parseColumn(ws->m_name);
