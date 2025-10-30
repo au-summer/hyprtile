@@ -270,7 +270,9 @@ SDispatchResult dispatch_movefocus(std::string arg)
                     switch (direction)
                     {
                     case 'l':
-                        if (window->m_position.x > target_window->m_position.x)
+                        // if (window->m_position.x > target_window->m_position.x)
+                        if (window->m_position.x + window->m_realSize->goal().x >
+                            target_window->m_position.x + target_window->m_realSize->goal().x)
                             target_window = window;
                         break;
                     case 'r':
@@ -278,7 +280,9 @@ SDispatchResult dispatch_movefocus(std::string arg)
                             target_window = window;
                         break;
                     case 'u':
-                        if (window->m_position.y > target_window->m_position.y)
+                        // if (window->m_position.y > target_window->m_position.y)
+                        if (window->m_position.y + window->m_realSize->goal().y >
+                            target_window->m_position.y + target_window->m_realSize->goal().y)
                             target_window = window;
                         break;
                     case 'd':
