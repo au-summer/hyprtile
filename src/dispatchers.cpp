@@ -73,6 +73,15 @@ SDispatchResult dispatch_workspace(std::string arg)
 
         return {};
     }
+    // TODO: support l/r/u/d
+    // else if (arg == "l")
+    // {
+    //     std::string target_workspace_name = get_workspace_in_direction('l');
+    // }
+    // else if (arg == "r")
+    // {
+    //     std::string target_workspace_name = get_workspace_in_direction('r');
+    // }
 
     int target_column = std::stoi(arg);
 
