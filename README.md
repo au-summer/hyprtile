@@ -156,3 +156,14 @@ bind = $mod, I, hyprtile:insertworkspace
 ```
 
 ## Roadmap
+
+- [x] Rewriting into plugin
+  - [x] General animation control
+  - [x] Dispatcher for moving the current workspace around the column
+  - [ ] Dispatcher for moving the current workspace to other columns
+  - [ ] Moving windows to adjacent workspaces should move to edge
+- [x] Name-based instead of id-based management
+- [x] Natural waybar sorting support
+- [x] Overview mode
+  - [ ] Overview for multiple monitors
+- [ ] Gesture support
