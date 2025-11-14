@@ -34,13 +34,12 @@ char parse_move_arg(const std::string &arg)
         return '\0';
 }
 
-// Helper: Check if window is on current monitor
 bool is_window_on_current_monitor(const PHLWINDOWREF &window)
 {
     return window->m_monitor->m_id == g_pCompositor->m_lastMonitor->m_id;
 }
 
-// Helper: Check if we should use Hyprland's focus logic for floating windows
+// check if we should use Hyprland's focus logic
 bool should_use_hyprland_for_floating_focus(const PHLWINDOW &old_window, const PHLWINDOW &new_window, char direction)
 {
     if (!old_window->m_isFloating || !new_window->m_isFloating)
@@ -62,7 +61,7 @@ bool should_use_hyprland_for_floating_focus(const PHLWINDOW &old_window, const P
     return true;
 }
 
-// Helper: Compare windows by position based on direction to find best window to focus
+// compare windows by position based on direction to find best window to focus
 bool is_better_window_for_direction(const PHLWINDOWREF &candidate, const PHLWINDOWREF &current_best, char direction)
 {
     switch (direction)
@@ -82,7 +81,7 @@ bool is_better_window_for_direction(const PHLWINDOWREF &candidate, const PHLWIND
     }
 }
 
-// Helper: Find best window to focus in target workspace based on direction
+// find best window to focus in target workspace based on direction
 PHLWINDOWREF find_best_window_in_workspace(const std::string &target_workspace_name, char direction)
 {
     bool found = false;
@@ -116,7 +115,7 @@ PHLWINDOWREF find_best_window_in_workspace(const std::string &target_workspace_n
     return found ? target_window : PHLWINDOWREF();
 }
 
-// Helper: Find workspace in column by searching window focus history
+// find workspace in column latest visited
 std::string find_workspace_by_column(int target_column)
 {
     for (auto const &window : g_pCompositor->m_windowFocusHistory)
@@ -138,7 +137,7 @@ std::string find_workspace_by_column(int target_column)
     return "";
 }
 
-// Helper: Find previous workspace (different column) on current monitor
+// find previous workspace on different column on current monitor
 std::string find_previous_workspace(int current_column)
 {
     for (auto const &window : g_pCompositor->m_windowFocusHistory)
@@ -216,7 +215,6 @@ SDispatchResult dispatch_workspace(std::string arg)
     return {};
 }
 
-// Helper: Find workspace in horizontal direction (left/right) on same monitor
 std::string find_horizontal_workspace(int current_column, bool search_left)
 {
     int target_column = search_left ? 0 : INT_MAX;
@@ -404,9 +402,14 @@ SDispatchResult dispatch_movewindow(std::string arg)
     return {};
 }
 
-// Helper: Shared implementation for movetoworkspace and movetoworkspacesilent
+// shared implementation for movetoworkspace and movetoworkspacesilent
 SDispatchResult move_to_workspace_impl(std::string arg, bool silent)
 {
+    if (focus_mode)
+    {
+        return {.success = false, .error = "Focus mode is enabled"};
+    }
+
     int target_column = name_to_column(arg);
 
     const std::string &current_workspace_name = g_pCompositor->m_lastMonitor->m_activeWorkspace->m_name;
@@ -430,11 +433,6 @@ SDispatchResult move_to_workspace_impl(std::string arg, bool silent)
 
 SDispatchResult dispatch_movetoworkspace(std::string arg)
 {
-    if (focus_mode)
-    {
-        return {.success = false, .error = "Focus mode is enabled"};
-    }
-
     return move_to_workspace_impl(arg, false);
 }
 
@@ -547,6 +545,7 @@ SDispatchResult dispatch_moveworkspace(std::string arg)
     }
     else
     {
+        // TODO: support moving workspace to left/right column
         return {.success = false, .error = "Invalid direction for moveworkspace"};
     }
 
