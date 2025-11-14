@@ -1,46 +1,204 @@
 # Hyprtile
 
-This plugin makes Hyprland not only tile windows, but also tile workspaces with each other.
+A Hyprland plugin that brings tiling window concepts to workspace themselves. Organize your workspaces in a logical, two-dimensional grid where workspaces are arranged in vertical columns.
 
-## Idea
+## Concept
 
-The idea is that each workspace is a column, with each workspace being a tile in that column. The columns are arranged horizontally, and the workspaces in each column are arranged vertically. This allows for a more flexible and logical management of windows and workspaces.
+Hyprtile organizes workspaces into **vertical columns** that are arranged horizontally across your screen. Think of it as applying tiling window manager principles to workspaces themselves.
 
-# Demo
+```
+Column 1    Column 2    Column 3
+┌─────┐     ┌─────┐     ┌─────┐
+│  1  │     │  2  │     │  3  │
+├─────┤     ├─────┤     ├─────┤
+│ 1a  │     │ 2a  │     │ 3a  │
+├─────┤     ├─────┤     └─────┘
+│ 1b  │     │ 2b  │
+└─────┘     └─────┘
+```
+
+## Features
+
+- **2D Workspace Navigation**: Move between workspaces left/right (columns) and up/down (within columns)
+- **Smart Window Movement**: Move windows directionally across workspace boundaries
+- **Workspace Overview Mode**: Grid view of all workspaces (expo mode)
+- **Smooth Directional Animations**: Workspace transitions animate based on direction
+- **Column Management**: Insert, clear, and reorganize workspace columns
+- **Waybar Integration**: Natural workspace sorting in status bars
+- **Multi-monitor Support**: Move columns and focus between monitors
+
+## Demo
 
 (TODO)
 
 ## Installation
 
-1. Clone the repository
-1. Build the plugin using `make`
-1. Run `hyprctl plugin load /path/to/hyprtile.so`
-1. Set `"sort-by": "name"` in `"hyprland/workspaces"` waybar setting
+### Build and Install
 
-> Note: If when loading the plugin you get an error `[hyprtile] Version mismatch`, install the Hyprland headers that fits your Hyprland version. You can install them by cloning the official Hyprland repository, checkout to your corresponding version's commit, and run `sudo make installheaders`.
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/yourusername/hyprtile
+   cd hyprtile
+   ```
+
+2. **Build the plugin**
+   ```bash
+   make
+   ```
+
+3. **Load the plugin**
+   ```bash
+   hyprctl plugin load /path/to/hyprtile/hyprtile.so
+   ```
+
+4. **Optional: Auto-load on startup**
+
+   Add to your `~/.config/hypr/hyprland.conf`:
+   ```
+   exec-once = hyprctl plugin load /path/to/hyprtile/hyprtile.so
+   ```
+
+### Waybar Integration
+
+For proper workspace sorting in Waybar, add this to your waybar config:
+
+```json
+"hyprland/workspaces": {
+    "sort-by": "name"
+}
+```
+
+## Configuration
+
+Add these options to your `~/.config/hypr/hyprland.conf`:
+
+```conf
+# Overview mode settings
+plugin {
+    hyprtileexpo {
+        gap_size = 10        # Gap between workspace thumbnails in overview
+        bg_col = 0xFF111111  # Background color (ARGB format)
+    }
+}
+```
 
 ## Dispatchers
 
-- `hyprtile:workspace number` - Switch to the last focused workspace on that column.
-- `hyprtile:movefocus l/r/u/d` - Movefocus in the specified direction.
-- `hyprtile:movewindow l/r/u/d` - Move the focused window in the specified direction. Can move the window to adjacent workspaces.
-- `hyprtile:movetoworkspace number` - Move the focused window to the last focused workspace on that column.
-- `hyprtile:movetoworkspaceslient number` - Move the focused window to the last focused workspace on that column silently.
-- `hyprtile:clearworkspace` - Clear the current column to remove all empty workspaces.
-- `hyprtile:insertworkspace` - Insert a new workspace on the current column, and push all workspaces below by one.
-- `hyprtile:movecurrentworkspacetomonitor l/r/u/d` - Move the current column to the next monitor in the specified direction. (The name is kept for compatibility with hyprland)
-- `hyprtile:movefocustomonitor l/r/u/d` - Move focus to the next monitor in the specified direction.
-- `hyprtile:expo toggle/on/off` - Toggle the overview mode, showing all workspaces in a grid.
+Hyprtile provides custom dispatchers for workspace and window management. Add these to your Hyprland keybindings.
+
+### Workspace Navigation
+
+| Dispatcher | Description | Example |
+|------------|-------------|---------|
+| `hyprtile:workspace <number>` | Switch to the last focused workspace in column `<number>` | `bind = $mod, 1, hyprtile:workspace, 1` |
+| `hyprtile:movefocus <l/r/u/d>` | Move focus in the specified direction (left/right/up/down) | `bind = $mod, left, hyprtile:movefocus, l` |
+| `hyprtile:movefocustomonitor <l/r/u/d>` | Move focus to the next monitor in the specified direction | `bind = $mod SHIFT, left, hyprtile:movefocustomonitor, l` |
+
+### Window Management
+
+| Dispatcher | Description | Example |
+|------------|-------------|---------|
+| `hyprtile:movewindow <l/r/u/d>` | Move the focused window in the specified direction, can cross workspace boundaries | `bind = $mod SHIFT, right, hyprtile:movewindow, r` |
+| `hyprtile:movetoworkspace <number>` | Move the focused window to the last focused workspace in column `<number>` | `bind = $mod SHIFT, 2, hyprtile:movetoworkspace, 2` |
+| `hyprtile:movetoworkspacesilent <number>` | Move window to workspace in column `<number>` without switching focus | `bind = $mod CTRL, 3, hyprtile:movetoworkspacesilent, 3` |
+
+### Column Management
+
+| Dispatcher | Description | Example |
+|------------|-------------|---------|
+| `hyprtile:clearworkspace` | Remove all empty workspaces from the current column | `bind = $mod, C, hyprtile:clearworkspace` |
+| `hyprtile:insertworkspace` | Insert a new workspace at the current position, pushing workspaces below down | `bind = $mod, I, hyprtile:insertworkspace` |
+| `hyprtile:movecurrentworkspacetomonitor <l/r/u/d>` | Move the current column to the next monitor | `bind = $mod ALT, right, hyprtile:movecurrentworkspacetomonitor, r` |
+
+### Overview Mode
+
+| Dispatcher | Description | Example |
+|------------|-------------|---------|
+| `hyprtile:expo <toggle/on/off>` | Toggle/enable/disable overview mode showing all workspaces in a grid | `bind = $mod, Tab, hyprtile:expo, toggle` |
+
+## Usage Examples
+
+### Basic Keybindings
+
+Here's a suggested keybinding configuration for `~/.config/hypr/hyprland.conf`:
+
+```conf
+# Workspace navigation
+bind = $mod, 1, hyprtile:workspace, 1
+bind = $mod, 2, hyprtile:workspace, 2
+bind = $mod, 3, hyprtile:workspace, 3
+bind = $mod, 4, hyprtile:workspace, 4
+
+# Directional focus
+bind = $mod, left,  hyprtile:movefocus, l
+bind = $mod, right, hyprtile:movefocus, r
+bind = $mod, up,    hyprtile:movefocus, u
+bind = $mod, down,  hyprtile:movefocus, d
+
+# Move windows
+bind = $mod SHIFT, left,  hyprtile:movewindow, l
+bind = $mod SHIFT, right, hyprtile:movewindow, r
+bind = $mod SHIFT, up,    hyprtile:movewindow, u
+bind = $mod SHIFT, down,  hyprtile:movewindow, d
+
+# Move window to column
+bind = $mod SHIFT, 1, hyprtile:movetoworkspace, 1
+bind = $mod SHIFT, 2, hyprtile:movetoworkspace, 2
+bind = $mod SHIFT, 3, hyprtile:movetoworkspace, 3
+bind = $mod SHIFT, 4, hyprtile:movetoworkspace, 4
+
+# Overview mode
+bind = $mod, Tab, hyprtile:expo, toggle
+
+# Column management
+bind = $mod, C, hyprtile:clearworkspace
+bind = $mod, I, hyprtile:insertworkspace
+```
+
+### Workflow Example
+
+1. **Start with workspace `1`** (column 1, position 0)
+2. **Create workspace `1a`**: Use `hyprtile:insertworkspace` or move a window down
+3. **Navigate down**: Press `$mod + down` to move to workspace `1a`
+4. **Switch to column 2**: Press `$mod + 2` to go to workspace `2`
+5. **Move window between columns**: Press `$mod SHIFT + left` to move the current window to column 1
+6. **Overview all workspaces**: Press `$mod + Tab` to see the grid view
+
+## Development
+
+### Building
+
+```bash
+make          # Build the plugin
+make clean    # Clean build artifacts
+```
+
+### Reloading During Development
+
+```bash
+./reload.sh   # Unload and reload the plugin
+```
 
 ## Roadmap
 
-- [x] Rewriting into plugin
-  - [x] General animation control
-  - [x] Dispatcher for moving the current workspace around the column
-  - [ ] Dispatcher for moving the current workspace to other columns
-  - [ ] Moving windows to adjacent workspaces should move to edge
-- [x] Name-based instead of id-based management
-- [x] Natural waybar sorting support
-- [x] Overview mode
-  - [ ] Overview for multiple monitors
-- [ ] Gesture support
+### Completed Features
+- ✅ Plugin architecture
+- ✅ General animation control
+- ✅ Dispatcher for moving workspace within column
+- ✅ Name-based workspace management
+- ✅ Waybar integration
+- ✅ Overview mode (single monitor)
+
+### Planned Features
+- ⏳ Dispatcher for moving workspace between columns
+- ⏳ Window edge positioning when moving to adjacent workspaces
+- ⏳ Overview mode for multiple monitors
+- ⏳ Gesture support
+
+## Contributing
+
+Contributions are welcome! Feel free to open issues or submit pull requests.
+
+## License
+
+See LICENSE file for details.
