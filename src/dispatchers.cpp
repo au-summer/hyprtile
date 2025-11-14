@@ -34,6 +34,137 @@ char parse_move_arg(const std::string &arg)
         return '\0';
 }
 
+// Helper: Check if window is on current monitor
+bool is_window_on_current_monitor(const PHLWINDOWREF &window)
+{
+    return window->m_monitor->m_id == g_pCompositor->m_lastMonitor->m_id;
+}
+
+// Helper: Check if we should use Hyprland's focus logic for floating windows
+bool should_use_hyprland_for_floating_focus(const PHLWINDOW &old_window, const PHLWINDOW &new_window, char direction)
+{
+    if (!old_window->m_isFloating || !new_window->m_isFloating)
+        return true;
+
+    const auto &old_pos = old_window->m_realPosition;
+    const auto &old_size = old_window->m_realSize;
+    const auto &new_pos = new_window->m_realPosition;
+    const auto &new_size = new_window->m_realSize;
+
+    if ((direction == 'l' && new_pos->goal().x >= old_pos->goal().x) ||
+        (direction == 'r' && new_pos->goal().x + new_size->goal().x <= old_pos->goal().x + old_size->goal().x) ||
+        (direction == 'u' && new_pos->goal().y >= old_pos->goal().y) ||
+        (direction == 'd' && new_pos->goal().y + new_size->goal().y <= old_pos->goal().y + old_size->goal().y))
+    {
+        return false;
+    }
+
+    return true;
+}
+
+// Helper: Compare windows by position based on direction to find best window to focus
+bool is_better_window_for_direction(const PHLWINDOWREF &candidate, const PHLWINDOWREF &current_best, char direction)
+{
+    switch (direction)
+    {
+    case 'l':
+        return candidate->m_realPosition->goal().x + candidate->m_realSize->goal().x >
+               current_best->m_realPosition->goal().x + current_best->m_realSize->goal().x;
+    case 'r':
+        return candidate->m_realPosition->goal().x < current_best->m_realPosition->goal().x;
+    case 'u':
+        return candidate->m_realPosition->goal().y + candidate->m_realSize->goal().y >
+               current_best->m_realPosition->goal().y + current_best->m_realSize->goal().y;
+    case 'd':
+        return candidate->m_realPosition->goal().y < current_best->m_realPosition->goal().y;
+    default:
+        return false;
+    }
+}
+
+// Helper: Find best window to focus in target workspace based on direction
+PHLWINDOWREF find_best_window_in_workspace(const std::string &target_workspace_name, char direction)
+{
+    bool found = false;
+    PHLWINDOWREF target_window;
+
+    for (auto const &window : g_pCompositor->m_windowFocusHistory)
+    {
+        const std::string &window_workspace_name = window->m_workspace->m_name;
+
+        if (window_workspace_name == target_workspace_name)
+        {
+            // If the window is fullscreen, we want to focus it
+            if (window->isFullscreen())
+            {
+                return window;
+            }
+
+            if (!found)
+            {
+                target_window = window;
+            }
+            else if (is_better_window_for_direction(window, target_window, direction))
+            {
+                target_window = window;
+            }
+
+            found = true;
+        }
+    }
+
+    return found ? target_window : PHLWINDOWREF();
+}
+
+// Helper: Find workspace in column by searching window focus history
+std::string find_workspace_by_column(int target_column)
+{
+    for (auto const &window : g_pCompositor->m_windowFocusHistory)
+    {
+        const auto &workspace = window->m_workspace;
+        const std::string &workspace_name = workspace->m_name;
+        int workspace_column = name_to_column(workspace_name);
+
+        // skip special workspaces
+        if (workspace_column == -1)
+            continue;
+
+        if (workspace_column == target_column)
+        {
+            return workspace_name;
+        }
+    }
+
+    return "";
+}
+
+// Helper: Find previous workspace (different column) on current monitor
+std::string find_previous_workspace(int current_column)
+{
+    for (auto const &window : g_pCompositor->m_windowFocusHistory)
+    {
+        // TODO: is this really necessary?
+        if (!is_window_on_current_monitor(window))
+            continue;
+
+        const auto &workspace = window->m_workspace;
+        const std::string &workspace_name = workspace->m_name;
+
+        int workspace_column = name_to_column(workspace_name);
+
+        // special workspace, etc.
+        if (workspace_column == -1)
+            continue;
+
+        if (workspace_column != current_column)
+        {
+            return workspace_name;
+        }
+    }
+
+    return "";
+}
+
 SDispatchResult dispatch_workspace(std::string arg)
 {
     if (focus_mode)
@@ -46,70 +177,77 @@ SDispatchResult dispatch_workspace(std::string arg)
 
     if (arg == "previous")
     {
-        for (auto const &window : g_pCompositor->m_windowFocusHistory)
+        std::string previous_workspace_name = find_previous_workspace(current_column);
+        if (!previous_workspace_name.empty())
         {
-            // TODO: is this really necessary?
-            if (window->m_monitor->m_id != g_pCompositor->m_lastMonitor->m_id)
-                continue;
-
-            const auto &workspace = window->m_workspace;
-            const std::string &workspace_name = workspace->m_name;
-
-            int workspace_column = name_to_column(workspace_name);
-
-            // special workspace, etc.
-            if (workspace_column == -1)
-                continue;
-
-            if (workspace_column != current_column)
-            {
-                // anim_type = workspace_column < current_column ? 'l' : 'r';
-                HyprlandAPI::invokeHyprctlCommand("dispatch", "workspace name:" + workspace_name);
-                // anim_type = '\0';
-
-                return {};
-            }
+            // anim_type = workspace_column < current_column ? 'l' : 'r';
+            HyprlandAPI::invokeHyprctlCommand("dispatch", "workspace name:" + previous_workspace_name);
+            // anim_type = '\0';
         }
-
         return {};
     }
     // TODO: support l/r/u/d
-    // else if (arg == "l")
-    // {
-    //     std::string target_workspace_name = get_workspace_in_direction('l');
-    // }
-    // else if (arg == "r")
-    // {
-    //     std::string target_workspace_name = get_workspace_in_direction('r');
-    // }
+    else if (arg == "l")
+    {
+    }
+    else if (arg == "r")
+    {
+    }
+    else if (arg == "u")
+    {
+    }
+    else if (arg == "d")
+    {
+    }
 
     int target_column = std::stoi(arg);
 
+    std::string workspace_name = find_workspace_by_column(target_column);
+
+    // no window found on target workspace, simply switch to it
+    if (workspace_name.empty())
+    {
+        workspace_name = get_workspace_name(target_column, 0);
+    }
+
+    // anim_type = target_column < current_column ? 'l' : 'r';
+    HyprlandAPI::invokeHyprctlCommand("dispatch", "workspace name:" + workspace_name);
+    // anim_type = '\0';
+    return {};
+}
+
+// Helper: Find workspace in horizontal direction (left/right) on same monitor
+std::string find_horizontal_workspace(int current_column, bool search_left)
+{
+    int target_column = search_left ? 0 : INT_MAX;
+    std::string target_workspace_name;
+
     for (auto const &window : g_pCompositor->m_windowFocusHistory)
     {
-        const auto &workspace = window->m_workspace;
+        if (!is_window_on_current_monitor(window))
+            continue;
 
+        const auto &workspace = window->m_workspace;
         const std::string &workspace_name = workspace->m_name;
         int workspace_column = name_to_column(workspace_name);
 
-        // special workspace, etc.
+        // skip special workspaces
         if (workspace_column == -1)
             continue;
 
-        if (workspace_column == target_column)
+        bool is_valid = search_left ? (workspace_column < current_column && workspace_column > target_column)
+                                    : (workspace_column > current_column && workspace_column < target_column);
+
+        if (is_valid)
         {
-            // anim_type = workspace_column < current_column ? 'l' : 'r';
-            HyprlandAPI::invokeHyprctlCommand("dispatch", "workspace name:" + workspace_name);
-            // anim_type = '\0';
-            return {};
+            target_column = workspace_column;
+            target_workspace_name = workspace_name;
         }
     }
 
-    // no window found on target workspace, simply switch to it
-    // anim_type = target_column < current_column ? 'l' : 'r';
-    HyprlandAPI::invokeHyprctlCommand("dispatch", "workspace name:" + get_workspace_name(target_column, 0));
-    // anim_type = '\0';
-    return {};
+    // Check if we found a workspace
+    bool found = search_left ? (target_column != 0) : (target_column != INT_MAX);
+    return found ? target_workspace_name : "";
 }
 
 std::string get_workspace_in_direction(char direction)
@@ -120,80 +258,19 @@ std::string get_workspace_in_direction(char direction)
     int current_column = name_to_column(current_workspace_name);
     int current_index = name_to_index(current_workspace_name);
 
-    int target_column = 0;
-    std::string target_workspace_name;
-
     switch (direction)
     {
     case 'l':
-        target_column = 0;
-        for (auto const &window : g_pCompositor->m_windowFocusHistory)
-        {
-            if (window->m_monitor->m_id != g_pCompositor->m_lastMonitor->m_id)
-                continue;
-
-            const auto &workspace = window->m_workspace;
-            const std::string &workspace_name = workspace->m_name;
-            int workspace_column = name_to_column(workspace_name);
-
-            // skip special workspaces
-            if (workspace_column == -1)
-                continue;
-
-            if (workspace_column < current_column && workspace_column > target_column)
-            {
-                target_column = workspace_column;
-                target_workspace_name = workspace_name;
-            }
-        }
-
-        if (target_column == 0)
-        {
-            return "";
-        }
-
-        return target_workspace_name;
-
-        break;
+        return find_horizontal_workspace(current_column, true);
     case 'r':
-        target_column = INT_MAX;
-        for (auto const &window : g_pCompositor->m_windowFocusHistory)
-        {
-            if (window->m_monitor->m_id != g_pCompositor->m_lastMonitor->m_id)
-                continue;
-
-            const auto &workspace = window->m_workspace;
-            const std::string &workspace_name = workspace->m_name;
-            int workspace_column = name_to_column(workspace_name);
-
-            // skip special workspaces
-            if (workspace_column == -1)
-                continue;
-
-            if (workspace_column > current_column && workspace_column < target_column)
-            {
-                target_column = workspace_column;
-                target_workspace_name = workspace_name;
-            }
-        }
-
-        if (target_column == INT_MAX)
-        {
-            return "";
-        }
-
-        return target_workspace_name;
-        break;
+        return find_horizontal_workspace(current_column, false);
     case 'u':
         // if it is already the first workspace in the column, do nothing
         if (current_index == 0)
             return "";
-
         return get_workspace_name(current_column, current_index - 1);
-        break;
     case 'd':
         return get_workspace_name(current_column, current_index + 1);
-        break;
     }
 
     return "";
@@ -215,26 +292,7 @@ SDispatchResult dispatch_movefocus(std::string arg)
         {
             // special condition: both windows are floating
             // TODO: getWindowInDirection behaves weird when focusing up with floating windows
-            bool use_hyprland = true;
-            if (PLASTWINDOW->m_isFloating && PWINDOWTOCHANGETO->m_isFloating)
-            {
-                const auto &old_pos = PLASTWINDOW->m_realPosition;
-                const auto &old_size = PLASTWINDOW->m_realSize;
-                const auto &new_pos = PWINDOWTOCHANGETO->m_realPosition;
-                const auto &new_size = PWINDOWTOCHANGETO->m_realSize;
-
-                if ((direction == 'l' && new_pos->goal().x >= old_pos->goal().x) ||
-                    (direction == 'r' &&
-                     new_pos->goal().x + new_size->goal().x <= old_pos->goal().x + old_size->goal().x) ||
-                    (direction == 'u' && new_pos->goal().y >= old_pos->goal().y) ||
-                    (direction == 'd' &&
-                     new_pos->goal().y + new_size->goal().y <= old_pos->goal().y + old_size->goal().y))
-                {
-                    use_hyprland = false;
-                }
-            }
-
-            if (use_hyprland)
+            if (should_use_hyprland_for_floating_focus(PLASTWINDOW, PWINDOWTOCHANGETO, direction))
             {
                 g_pCompositor->focusWindow(PWINDOWTOCHANGETO);
                 return {};
@@ -253,61 +311,11 @@ SDispatchResult dispatch_movefocus(std::string arg)
 
     if (!target_workspace_name.empty())
     {
-        bool found = false;
-        PHLWINDOWREF target_window;
         // Find the window in the workspace in direction
-        for (auto const &window : g_pCompositor->m_windowFocusHistory)
-        {
-            const std::string &window_workspace_name = window->m_workspace->m_name;
-
-            if (window_workspace_name == target_workspace_name)
-            {
-                // If the window is fullscreen, we want to focus it
-                if (window->isFullscreen())
-                {
-                    target_window = window;
-                    found = true;
-                    break;
-                }
-
-                if (!found)
-                {
-                    target_window = window;
-                }
-                else
-                {
-                    switch (direction)
-                    {
-                    case 'l':
-                        if (window->m_realPosition->goal().x + window->m_realSize->goal().x >
-                            target_window->m_realPosition->goal().x + target_window->m_realSize->goal().x)
-
-                            target_window = window;
-                        break;
-                    case 'r':
-                        if (window->m_realPosition->goal().x < target_window->m_realPosition->goal().x)
-                            target_window = window;
-                        break;
-                    case 'u':
-                        if (window->m_realPosition->goal().y + window->m_realSize->goal().y >
-                            target_window->m_realPosition->goal().y + target_window->m_realSize->goal().y)
-
-                            target_window = window;
-                        break;
-                    case 'd':
-                        if (window->m_realPosition->goal().y < target_window->m_realPosition->goal().y)
-
-                            target_window = window;
-                        break;
-                    }
-                }
-
-                found = true;
-            }
-        }
+        PHLWINDOWREF target_window = find_best_window_in_workspace(target_workspace_name, direction);
 
         // anim_type = direction;
-        if (found)
+        if (target_window)
         {
             // g_pCompositor->focusWindow(target_window.lock());
 
@@ -396,6 +404,30 @@ SDispatchResult dispatch_movewindow(std::string arg)
     return {};
 }
 
+// Helper: Shared implementation for movetoworkspace and movetoworkspacesilent
+SDispatchResult move_to_workspace_impl(std::string arg, bool silent)
+{
+    int target_column = name_to_column(arg);
+
+    const std::string &current_workspace_name = g_pCompositor->m_lastMonitor->m_activeWorkspace->m_name;
+    int current_column = name_to_column(current_workspace_name);
+
+    std::string workspace_name_to_use = find_workspace_by_column(target_column);
+
+    // no window found on target workspace, use default workspace name
+    if (workspace_name_to_use.empty())
+    {
+        workspace_name_to_use = get_workspace_name(target_column, 0);
+    }
+
+    // anim_type = workspace_column < current_column ? 'l' : 'r';
+    std::string command = silent ? "movetoworkspacesilent name:" : "movetoworkspace name:";
+    HyprlandAPI::invokeHyprctlCommand("dispatch", command + workspace_name_to_use);
+    // anim_type = '\0';
+
+    return {};
+}
+
 SDispatchResult dispatch_movetoworkspace(std::string arg)
 {
     if (focus_mode)
@@ -403,70 +435,12 @@ SDispatchResult dispatch_movetoworkspace(std::string arg)
         return {.success = false, .error = "Focus mode is enabled"};
     }
 
-    int target_column = name_to_column(arg);
-
-    const std::string &current_workspace_name = g_pCompositor->m_lastMonitor->m_activeWorkspace->m_name;
-    int current_column = name_to_column(current_workspace_name);
-
-    for (auto const &window : g_pCompositor->m_windowFocusHistory)
-    {
-        const auto &workspace = window->m_workspace;
-        const std::string &workspace_name = workspace->m_name;
-        int workspace_column = name_to_column(workspace_name);
-
-        // skip special workspaces
-        if (workspace_column == -1)
-            continue;
-
-        if (workspace_column == target_column)
-        {
-            // anim_type = workspace_column < current_column ? 'l' : 'r';
-            HyprlandAPI::invokeHyprctlCommand("dispatch", "movetoworkspace name:" + workspace->m_name);
-            // anim_type = '\0';
-            return {};
-        }
-    }
-
-    // no window found on target workspace, simply switch to it
-    // anim_type = target_column < current_column ? 'l' : 'r';
-    HyprlandAPI::invokeHyprctlCommand("dispatch", "movetoworkspace name:" + get_workspace_name(target_column, 0));
-    // anim_type = '\0';
-
-    return {};
+    return move_to_workspace_impl(arg, false);
 }
 
 SDispatchResult dispatch_movetoworkspacesilent(std::string arg)
 {
-    int target_column = name_to_column(arg);
-
-    const std::string &current_workspace_name = g_pCompositor->m_lastMonitor->m_activeWorkspace->m_name;
-    int current_column = name_to_column(current_workspace_name);
-
-    for (auto const &window : g_pCompositor->m_windowFocusHistory)
-    {
-        const auto &workspace = window->m_workspace;
-        const std::string &workspace_name = workspace->m_name;
-        int workspace_column = name_to_column(workspace_name);
-
-        // skip special workspaces
-        if (workspace_column == -1)
-            continue;
-
-        if (workspace_column == target_column)
-        {
-            // anim_type = workspace_column < current_column ? 'l' : 'r';
-            HyprlandAPI::invokeHyprctlCommand("dispatch", "movetoworkspacesilent name:" + workspace->m_name);
-            // anim_type = '\0';
-            return {};
-        }
-    }
-
-    // no window found on target workspace, simply switch to it
-    // anim_type = target_column < current_column ? 'l' : 'r';
-    HyprlandAPI::invokeHyprctlCommand("dispatch", "movetoworkspacesilent name:" + get_workspace_name(target_column, 0));
-    // anim_type = '\0';
-
-    return {};
+    return move_to_workspace_impl(arg, true);
 }
 
 SDispatchResult dispatch_cleancurrentcolumn(std::string arg)

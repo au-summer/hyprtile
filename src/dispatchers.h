@@ -12,7 +12,7 @@ namespace dispatchers
 
 void addDispatchers();
 
-std::string parse_move_arg(const std::string &arg);
+char parse_move_arg(const std::string &arg);
 std::string get_workspace_in_direction(char direction);
 
 SDispatchResult dispatch_movefocus(std::string arg);
