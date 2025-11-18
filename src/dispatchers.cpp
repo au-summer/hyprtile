@@ -292,7 +292,11 @@ SDispatchResult dispatch_movefocus(std::string arg)
             // TODO: getWindowInDirection behaves weird when focusing up with floating windows
             if (should_use_hyprland_for_floating_focus(PLASTWINDOW, PWINDOWTOCHANGETO, direction))
             {
-                g_pCompositor->focusWindow(PWINDOWTOCHANGETO);
+                // g_pCompositor->focusWindow(PWINDOWTOCHANGETO);
+
+                // Due to mouse cursor warping and other focus side effects, use hyprland's command instead
+                HyprlandAPI::invokeHyprctlCommand(
+                    "dispatch", "focuswindow address:" + std::format("{:#x}", (uintptr_t)PWINDOWTOCHANGETO.get()));
                 return {};
             }
         }
@@ -317,8 +321,7 @@ SDispatchResult dispatch_movefocus(std::string arg)
         {
             // g_pCompositor->focusWindow(target_window.lock());
 
-            // Due to hide_special_on_workspace_change option, use hyprland's command
-            // instead
+            // Due to hide_special_on_workspace_change option, use hyprland's command instead
             HyprlandAPI::invokeHyprctlCommand("dispatch", "focuswindow address:" +
                                                               std::format("{:#x}", (uintptr_t)target_window.get()));
         }
