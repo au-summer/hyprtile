@@ -12,11 +12,6 @@
 #include "utils.h"
 
 #include "globals.h"
-#include "overview.h"
-
-#include <limits>
-
-// HANDLE PHANDLE = nullptr;
 
 APICALL EXPORT std::string PLUGIN_API_VERSION()
 {
