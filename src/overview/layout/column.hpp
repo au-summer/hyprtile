@@ -2,6 +2,7 @@
 
 #include <hyprland/src/helpers/AnimatedVariable.hpp>
 #include <map>
+#include <vector>
 
 #include "../types.hpp"
 #include "layout_base.hpp"
@@ -12,9 +13,11 @@ class HTLayoutColumn : public HTLayoutBase {
     PHLANIMVAR<Vector2D> offset;
 
     // Dynamic grid dimensions discovered from existing workspaces
-    int max_columns = 0;
-    int max_rows = 0;  // Max height among all columns
-    std::map<int, int> column_heights;  // column_number -> height
+    int num_columns = 0;  // Actual count of existing columns
+    int max_rows = 0;     // Max height among all columns
+    std::map<int, int> column_heights;    // column_number -> height
+    std::vector<int> existing_columns;    // Sorted list of existing column numbers
+    std::map<int, int> column_to_grid_x;  // column_number -> grid x position
 
   public:
     HTLayoutColumn(VIEWID view_id);

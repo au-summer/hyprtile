@@ -1,6 +1,7 @@
 #include "column.hpp"
 
 #include <ctime>
+#include <set>
 #include <hyprland/src/Compositor.hpp>
 #include <hyprland/src/config/ConfigManager.hpp>
 #include <hyprland/src/config/ConfigValue.hpp>
@@ -64,10 +65,14 @@ WORKSPACEID HTLayoutColumn::get_ws_id_from_column_index(int column, int index) {
 }
 
 WORKSPACEID HTLayoutColumn::get_ws_id_in_direction(int x, int y, std::string& direction) {
-    // x is 0-indexed column position in the grid
+    // x is 0-indexed grid position (not column number)
     // y is row index within the column
-    // Convert to 1-indexed column number for hyprtile
-    int column = x + 1;
+    // existing_columns[x] gives the actual column number at grid position x
+
+    if (x < 0 || x >= (int)existing_columns.size())
+        return WORKSPACE_INVALID;
+
+    int column = existing_columns[x];
 
     if (direction == "up") {
         if (y <= 0)
@@ -83,16 +88,16 @@ WORKSPACEID HTLayoutColumn::get_ws_id_in_direction(int x, int y, std::string& di
         if (x <= 0)
             return WORKSPACE_INVALID;
         x--;
-        column = x + 1;
+        column = existing_columns[x];
         // Clamp y to the height of the target column
         auto it = column_heights.find(column);
         if (it != column_heights.end() && y >= it->second)
             y = it->second - 1;
     } else if (direction == "right") {
-        if (x + 1 >= max_columns)
+        if (x + 1 >= (int)existing_columns.size())
             return WORKSPACE_INVALID;
         x++;
-        column = x + 1;
+        column = existing_columns[x];
         // Clamp y to the height of the target column
         auto it = column_heights.find(column);
         if (it != column_heights.end() && y >= it->second)
@@ -112,11 +117,11 @@ void HTLayoutColumn::on_move_swipe(Vector2D delta) {
     const float MOVE_DISTANCE = HyprtileConfig::value<Hyprlang::FLOAT>("gestures:move_distance");
 
     // Calculate bounds based on discovered workspaces
-    if (max_columns == 0 || max_rows == 0)
+    if (num_columns == 0 || max_rows == 0)
         return;
 
     const CBox min_ws = calculate_ws_box(0, 0, HT_VIEW_CLOSED);
-    const CBox max_ws = calculate_ws_box(max_columns - 1, max_rows - 1, HT_VIEW_CLOSED);
+    const CBox max_ws = calculate_ws_box(num_columns - 1, max_rows - 1, HT_VIEW_CLOSED);
 
     Vector2D new_offset = offset->value() + delta / MOVE_DISTANCE * max_ws.w;
     new_offset = new_offset.clamp(Vector2D {-max_ws.x, -max_ws.y}, Vector2D {-min_ws.x, -min_ws.y});
@@ -271,8 +276,8 @@ CBox HTLayoutColumn::calculate_ws_box(int x, int y, HTViewStage stage) {
     if (monitor == nullptr)
         return {};
 
-    // Use discovered dimensions
-    const int COLS = std::max(1, max_columns);
+    // Use discovered dimensions (num_columns is actual count of existing columns)
+    const int COLS = std::max(1, num_columns);
     const int ROWS = std::max(1, max_rows);
 
     const float GAP_SIZE = HyprtileConfig::value<Hyprlang::FLOAT>("gap_size") * monitor->m_scale;
@@ -317,10 +322,13 @@ void HTLayoutColumn::build_overview_layout(HTViewStage stage) {
 
     overview_layout.clear();
     column_heights.clear();
-    max_columns = 0;
+    existing_columns.clear();
+    column_to_grid_x.clear();
+    num_columns = 0;
     max_rows = 0;
 
-    // Discover all existing workspaces on this monitor
+    // First pass: discover all existing columns and their heights
+    std::set<int> column_set;
     for (const auto& workspace : g_pCompositor->getWorkspaces()) {
         if (workspace->m_monitor->m_id != view_id)
             continue;
@@ -332,14 +340,20 @@ void HTLayoutColumn::build_overview_layout(HTViewStage stage) {
         if (column == -1)
             continue;
 
-        // Track column dimensions
-        max_columns = std::max(max_columns, column);
+        column_set.insert(column);
         column_heights[column] = std::max(column_heights[column], index + 1);
         max_rows = std::max(max_rows, index + 1);
     }
 
+    // Build sorted list of existing columns and create mapping
+    existing_columns.assign(column_set.begin(), column_set.end());
+    num_columns = existing_columns.size();
+    for (int i = 0; i < num_columns; i++) {
+        column_to_grid_x[existing_columns[i]] = i;
+    }
+
     // Ensure we have at least a 1x1 grid
-    if (max_columns == 0) max_columns = 1;
+    if (num_columns == 0) num_columns = 1;
     if (max_rows == 0) max_rows = 1;
 
     // Now populate overview_layout for each discovered workspace
@@ -353,8 +367,8 @@ void HTLayoutColumn::build_overview_layout(HTViewStage stage) {
         if (column == -1)
             continue;
 
-        // x is 0-indexed column position, y is row index
-        int x = column - 1;
+        // x is grid position (mapped from column number), y is row index
+        int x = column_to_grid_x[column];
         int y = index;
 
         const CBox ws_box = calculate_ws_box(x, y, stage);
