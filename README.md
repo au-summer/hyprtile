@@ -21,7 +21,6 @@ Column 1    Column 2    Column 3
 
 - **2D Workspace Navigation**: Move between workspaces left/right (columns) and up/down (within columns)
 - **Smart Window Movement**: Move windows directionally across workspace boundaries
-- **Workspace Overview Mode**: Grid view of all workspaces (expo mode)
 - **Smooth Directional Animations**: Workspace transitions animate based on direction
 - **Column Management**: Insert, clear, and reorganize workspace columns
 - **Waybar Integration**: Natural workspace sorting in status bars
@@ -68,20 +67,6 @@ For proper workspace sorting in Waybar, add this to your waybar config:
 }
 ```
 
-## Configuration
-
-Add these options to your `~/.config/hypr/hyprland.conf`:
-
-```conf
-# Overview mode settings
-plugin {
-    hyprtileexpo {
-        gap_size = 10        # Gap between workspace thumbnails in overview
-        bg_col = 0xFF111111  # Background color (ARGB format)
-    }
-}
-```
-
 ## Dispatchers
 
 Hyprtile provides custom dispatchers for workspace and window management. Add these to your Hyprland keybindings.
@@ -109,12 +94,6 @@ Hyprtile provides custom dispatchers for workspace and window management. Add th
 | `hyprtile:clearworkspace` | Remove all empty workspaces from the current column | `bind = $mod, C, hyprtile:clearworkspace` |
 | `hyprtile:insertworkspace` | Insert a new workspace at the current position, pushing workspaces below down | `bind = $mod, I, hyprtile:insertworkspace` |
 | `hyprtile:movecurrentworkspacetomonitor <l/r/u/d>` | Move the current column to the next monitor | `bind = $mod ALT, right, hyprtile:movecurrentworkspacetomonitor, r` |
-
-### Overview Mode
-
-| Dispatcher | Description | Example |
-|------------|-------------|---------|
-| `hyprtile:expo <toggle/on/off>` | Toggle/enable/disable overview mode showing all workspaces in a grid | `bind = $mod, Tab, hyprtile:expo, toggle` |
 
 ## Usage Examples
 
@@ -147,9 +126,6 @@ bind = $mod SHIFT, 2, hyprtile:movetoworkspace, 2
 bind = $mod SHIFT, 3, hyprtile:movetoworkspace, 3
 bind = $mod SHIFT, 4, hyprtile:movetoworkspace, 4
 
-# Overview mode
-bind = $mod, Tab, hyprtile:expo, toggle
-
 # Column management
 bind = $mod, C, hyprtile:clearworkspace
 bind = $mod, I, hyprtile:insertworkspace
@@ -164,6 +140,4 @@ bind = $mod, I, hyprtile:insertworkspace
   - [ ] Moving windows to adjacent workspaces should move to edge
 - [x] Name-based instead of id-based management
 - [x] Natural waybar sorting support
-- [x] Overview mode
-  - [ ] Overview for multiple monitors
 - [ ] Gesture support

@@ -11,6 +11,7 @@
 #include <string>
 
 #include "globals.h"
+#include "overview/globals.hpp"
 #include "utils.h"
 
 bool focus_mode = false;
@@ -654,6 +655,63 @@ SDispatchResult dispatch_togglefocusmode(std::string arg)
     return {};
 }
 
+// Overview dispatchers
+
+SDispatchResult dispatch_overview(std::string arg)
+{
+    if (!ht_manager)
+        return {.success = false, .error = "Overview manager not initialized"};
+
+    // Check if focus mode is enabled - disable overview when focus mode is on
+    if (focus_mode)
+    {
+        return {.success = false, .error = "Cannot open overview in focus mode"};
+    }
+
+    if (ht_manager->has_active_view())
+    {
+        ht_manager->hide_all_views();
+    }
+    else
+    {
+        ht_manager->show_all_views();
+    }
+
+    return {};
+}
+
+SDispatchResult dispatch_overview_move(std::string arg)
+{
+    if (!ht_manager)
+        return {.success = false, .error = "Overview manager not initialized"};
+
+    if (!ht_manager->has_active_view())
+        return {.success = false, .error = "Overview not active"};
+
+    auto view = ht_manager->get_view_from_cursor();
+    if (!view)
+        return {.success = false, .error = "No view found"};
+
+    view->move(arg, false);
+    return {};
+}
+
+SDispatchResult dispatch_overview_movewindow(std::string arg)
+{
+    if (!ht_manager)
+        return {.success = false, .error = "Overview manager not initialized"};
+
+    if (!ht_manager->has_active_view())
+        return {.success = false, .error = "Overview not active"};
+
+    auto view = ht_manager->get_view_from_cursor();
+    if (!view)
+        return {.success = false, .error = "No view found"};
+
+    view->move(arg, true);
+    return {};
+}
+
 void addDispatchers()
 {
     HyprlandAPI::addDispatcherV2(PHANDLE, "hyprtile:workspace", dispatch_workspace);
@@ -667,6 +725,11 @@ void addDispatchers()
     HyprlandAPI::addDispatcherV2(PHANDLE, "hyprtile:movecurrentcolumntomonitor", dispatch_movecurrentcolumntomonitor);
     HyprlandAPI::addDispatcherV2(PHANDLE, "hyprtile:movefocustomonitor", dispatch_movefocustomonitor);
     HyprlandAPI::addDispatcherV2(PHANDLE, "hyprtile:togglefocusmode", dispatch_togglefocusmode);
+
+    // Overview dispatchers
+    HyprlandAPI::addDispatcherV2(PHANDLE, "hyprtile:overview", dispatch_overview);
+    HyprlandAPI::addDispatcherV2(PHANDLE, "hyprtile:overview:move", dispatch_overview_move);
+    HyprlandAPI::addDispatcherV2(PHANDLE, "hyprtile:overview:movewindow", dispatch_overview_movewindow);
 }
 
 } // namespace dispatchers
