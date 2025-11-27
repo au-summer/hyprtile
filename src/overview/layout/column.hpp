@@ -19,6 +19,10 @@ class HTLayoutColumn : public HTLayoutBase {
     std::vector<int> existing_columns;    // Sorted list of existing column numbers
     std::map<int, int> column_to_grid_x;  // column_number -> grid x position
 
+    // Zoom state
+    float base_scale = 1.f;   // Default overview scale (calculated from grid)
+    float zoom_level = 1.f;   // Additional zoom multiplier (1.0 = no extra zoom)
+
   public:
     HTLayoutColumn(VIEWID view_id);
     virtual ~HTLayoutColumn() = default;
@@ -33,6 +37,8 @@ class HTLayoutColumn : public HTLayoutBase {
     virtual void on_move(WORKSPACEID old_id, WORKSPACEID new_id, CallbackFun on_complete);
     virtual void on_move_swipe(Vector2D delta);
     virtual WORKSPACEID on_move_swipe_end();
+
+    virtual bool on_mouse_axis(double delta) override;
 
     virtual WORKSPACEID get_ws_id_in_direction(int x, int y, std::string& direction);
 

@@ -148,6 +148,56 @@ WORKSPACEID HTLayoutColumn::on_move_swipe_end() {
     return closest;
 }
 
+bool HTLayoutColumn::on_mouse_axis(double delta) {
+    const PHTVIEW par_view = ht_manager->get_view_from_id(view_id);
+    if (par_view == nullptr || !par_view->active || par_view->closing)
+        return false;
+
+    const PHLMONITOR monitor = get_monitor();
+    if (monitor == nullptr)
+        return false;
+
+    // Get config values
+    const float ZOOM_FACTOR = HyprtileConfig::value<Hyprlang::FLOAT>("zoom_factor");
+    const float ZOOM_MIN = HyprtileConfig::value<Hyprlang::FLOAT>("zoom_min");
+    const float ZOOM_MAX = HyprtileConfig::value<Hyprlang::FLOAT>("zoom_max");
+
+    // Calculate new zoom level (scroll up = zoom in, scroll down = zoom out)
+    float zoom_multiplier = (delta > 0) ? (1.f / ZOOM_FACTOR) : ZOOM_FACTOR;
+    float new_zoom = zoom_level * zoom_multiplier;
+
+    // Clamp zoom level (zoom_min/max are relative to base_scale)
+    float min_zoom = ZOOM_MIN;
+    float max_zoom = ZOOM_MAX / base_scale;
+    new_zoom = std::clamp(new_zoom, min_zoom, max_zoom);
+
+    if (std::abs(new_zoom - zoom_level) < 0.001f)
+        return true;  // At limit, but still consume event
+
+    // Get cursor position relative to monitor (in scaled coordinates)
+    const Vector2D mouse_coords = g_pInputManager->getMouseCoordsInternal();
+    const Vector2D cursor_pos = (mouse_coords - monitor->m_position) * monitor->m_scale;
+
+    // Calculate new offset to keep cursor position fixed
+    // Formula: o2 = P * (1 - s2/s1) + o1 * (s2/s1)
+    float old_actual_scale = base_scale * zoom_level;
+    float new_actual_scale = base_scale * new_zoom;
+    float scale_ratio = new_actual_scale / old_actual_scale;
+
+    Vector2D new_offset = cursor_pos * (1.f - scale_ratio) + offset->value() * scale_ratio;
+
+    // Apply changes (warp immediately, no animation)
+    zoom_level = new_zoom;
+    offset->setValueAndWarp(new_offset);
+    scale->setValueAndWarp(new_actual_scale);
+
+    // Trigger redraw
+    g_pHyprRenderer->damageMonitor(monitor);
+    g_pCompositor->scheduleFrameForMonitor(monitor);
+
+    return true;  // Consume the event
+}
+
 void HTLayoutColumn::close_open_lerp(float perc) {
     const PHLMONITOR monitor = get_monitor();
     if (monitor == nullptr)
@@ -192,8 +242,12 @@ void HTLayoutColumn::on_show(CallbackFun on_complete) {
     }
     scale->setValueAndWarp(1.f);
 
+    // Calculate and store base scale, reset zoom level
+    base_scale = calculate_ws_box(0, 0, HT_VIEW_OPENED).w / monitor->m_transformedSize.x;
+    zoom_level = 1.f;
+
     // Now animate TO the overview view
-    *scale = calculate_ws_box(0, 0, HT_VIEW_OPENED).w / monitor->m_transformedSize.x;
+    *scale = base_scale;
     *offset = {0, 0};
 }
 
@@ -206,6 +260,9 @@ void HTLayoutColumn::on_hide(CallbackFun on_complete) {
     const PHLMONITOR monitor = get_monitor();
     if (monitor == nullptr)
         return;
+
+    // Reset zoom level when hiding
+    zoom_level = 1.f;
 
     build_overview_layout(HT_VIEW_CLOSED);
     *scale = 1.;
