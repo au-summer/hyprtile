@@ -25,12 +25,30 @@ bool HTManager::start_window_drag() {
     }
 
     const Vector2D mouse_coords = g_pInputManager->getMouseCoordsInternal();
+
+    // Check if there's a window under cursor first
+    const PHLWINDOW hovered_window = get_window_from_cursor(false);
+
+    if (hovered_window == nullptr) {
+        // No window under cursor - start drag pan mode
+        drag_state = HT_DRAG_PAN;
+        drag_start_pos = mouse_coords;
+        drag_start_offset = cursor_view->layout->get_current_offset();
+        drag_view_id = cursor_view->monitor_id;
+        return true;  // Cancel event
+    }
+
+    // Window exists - proceed with window drag
+    drag_state = HT_DRAG_WINDOW;
+
     const WORKSPACEID workspace_id = cursor_view->layout->get_ws_id_from_global(mouse_coords);
     PHLWORKSPACE cursor_workspace = g_pCompositor->getWorkspaceByID(workspace_id);
 
-    // If left click on non-workspace workspace, do nothing
-    if (cursor_workspace == nullptr)
+    // If left click on non-workspace area, do nothing
+    if (cursor_workspace == nullptr) {
+        drag_state = HT_DRAG_NONE;
         return false;
+    }
 
     // PHLWORKSPACEREF o_workspace = cursor_monitor->m_activeWorkspace;
     cursor_monitor->changeWorkspace(cursor_workspace, true);
@@ -73,6 +91,21 @@ bool HTManager::start_window_drag() {
 }
 
 bool HTManager::end_window_drag() {
+    // Handle drag pan mode end
+    if (drag_state == HT_DRAG_PAN) {
+        drag_state = HT_DRAG_NONE;
+        return true;  // Cancel event
+    }
+
+    // Not in any drag mode, nothing to do
+    if (drag_state != HT_DRAG_WINDOW) {
+        drag_state = HT_DRAG_NONE;
+        return false;
+    }
+
+    // Reset drag state
+    drag_state = HT_DRAG_NONE;
+
     const PHLMONITOR cursor_monitor = g_pCompositor->getMonitorFromCursor();
     const PHTVIEW cursor_view = get_view_from_monitor(cursor_monitor);
     if (cursor_monitor == nullptr || cursor_view == nullptr) {
@@ -181,6 +214,19 @@ bool HTManager::exit_to_workspace() {
 }
 
 bool HTManager::on_mouse_move() {
+    if (drag_state == HT_DRAG_PAN) {
+        const PHTVIEW view = get_view_from_id(drag_view_id);
+        if (view == nullptr || !view->active) {
+            drag_state = HT_DRAG_NONE;
+            return false;
+        }
+
+        const Vector2D mouse_coords = g_pInputManager->getMouseCoordsInternal();
+        const Vector2D delta = mouse_coords - drag_start_pos;
+
+        view->layout->apply_drag_pan(drag_start_offset, delta);
+        return true;  // Cancel event to prevent other handlers
+    }
     return false;
 }
 

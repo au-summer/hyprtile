@@ -472,6 +472,33 @@ Vector2D HTLayoutColumn::clamp_offset_to_bounds(const Vector2D& off) {
     return clamped;
 }
 
+Vector2D HTLayoutColumn::get_current_offset() {
+    return offset->value();
+}
+
+void HTLayoutColumn::apply_drag_pan(const Vector2D& start_offset, const Vector2D& mouse_delta) {
+    const PHLMONITOR monitor = get_monitor();
+    if (monitor == nullptr)
+        return;
+
+    // Convert mouse delta from global coordinates to scaled monitor coordinates
+    // The offset is in scaled coordinates, so we need to scale the delta
+    Vector2D scaled_delta = mouse_delta * monitor->m_scale;
+
+    // Apply delta to the starting offset (drag moves view, so offset changes in same direction as drag)
+    Vector2D new_offset = start_offset + scaled_delta;
+
+    // Clamp to valid bounds
+    new_offset = clamp_offset_to_bounds(new_offset);
+
+    // Apply immediately (no animation during drag)
+    offset->setValueAndWarp(new_offset);
+
+    // Trigger redraw
+    g_pHyprRenderer->damageMonitor(monitor);
+    g_pCompositor->scheduleFrameForMonitor(monitor);
+}
+
 void HTLayoutColumn::apply_edge_pan(PHLMONITOR monitor, float dt) {
     const float THRESHOLD = HyprtileConfig::value<Hyprlang::FLOAT>("edge_pan_threshold");
     const float SPEED = HyprtileConfig::value<Hyprlang::FLOAT>("edge_pan_speed");

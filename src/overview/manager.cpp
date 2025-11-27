@@ -107,6 +107,10 @@ void HTManager::show_cursor_view() {
 }
 
 void HTManager::reset() {
+    drag_state = HT_DRAG_NONE;
+    drag_start_pos = {};
+    drag_start_offset = {};
+    drag_view_id = 0;
     swipe_state = HT_SWIPE_NONE;
     swipe_amt = 0.0;
     views.clear();

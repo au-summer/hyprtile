@@ -58,4 +58,8 @@ class HTLayoutColumn : public HTLayoutBase {
 
     // Helper to get workspace ID from column/index position
     WORKSPACEID get_ws_id_from_column_index(int column, int index);
+
+    // Drag panning support
+    virtual Vector2D get_current_offset() override;
+    virtual void apply_drag_pan(const Vector2D& start_offset, const Vector2D& mouse_delta) override;
 };

@@ -80,4 +80,8 @@ class HTLayoutBase {
     Vector2D global_to_local_ws_unscaled(Vector2D pos, WORKSPACEID workspace_id);
     Vector2D local_ws_scaled_to_global(Vector2D pos, WORKSPACEID workspace_id);
     Vector2D local_ws_unscaled_to_global(Vector2D pos, WORKSPACEID workspace_id);
+
+    // Drag panning support
+    virtual Vector2D get_current_offset();
+    virtual void apply_drag_pan(const Vector2D& start_offset, const Vector2D& mouse_delta);
 };

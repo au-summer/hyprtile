@@ -205,3 +205,12 @@ Vector2D HTLayoutBase::local_ws_scaled_to_global(Vector2D pos, WORKSPACEID works
     pos /= monitor->m_scale;
     return local_ws_unscaled_to_global(pos, workspace_id);
 }
+
+Vector2D HTLayoutBase::get_current_offset() {
+    // Default implementation - override in derived classes
+    return {};
+}
+
+void HTLayoutBase::apply_drag_pan(const Vector2D& start_offset, const Vector2D& mouse_delta) {
+    // Default implementation - override in derived classes
+}
