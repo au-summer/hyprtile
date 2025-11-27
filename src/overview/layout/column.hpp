@@ -23,6 +23,14 @@ class HTLayoutColumn : public HTLayoutBase {
     float base_scale = 1.f;   // Default overview scale (calculated from grid)
     float zoom_level = 1.f;   // Additional zoom multiplier (1.0 = no extra zoom)
 
+    // Edge panning state
+    timespec last_render_time = {0, 0};
+    bool edge_pan_initialized = false;
+
+    // Helper methods
+    void apply_edge_pan(PHLMONITOR monitor, float dt);
+    Vector2D clamp_offset_to_bounds(const Vector2D& off);
+
   public:
     HTLayoutColumn(VIEWID view_id);
     virtual ~HTLayoutColumn() = default;

@@ -180,16 +180,20 @@ bool HTLayoutColumn::on_mouse_axis(double delta) {
 
     // Calculate new offset to keep cursor position fixed
     // Formula: o2 = P * (1 - s2/s1) + o1 * (s2/s1)
-    float old_actual_scale = base_scale * zoom_level;
+    // Use current animated values for smooth chained animations
+    float old_actual_scale = scale->value();
     float new_actual_scale = base_scale * new_zoom;
     float scale_ratio = new_actual_scale / old_actual_scale;
 
     Vector2D new_offset = cursor_pos * (1.f - scale_ratio) + offset->value() * scale_ratio;
 
-    // Apply changes (warp immediately, no animation)
+    // Clamp offset to valid bounds
+    new_offset = clamp_offset_to_bounds(new_offset);
+
+    // Apply changes with smooth animation
     zoom_level = new_zoom;
-    offset->setValueAndWarp(new_offset);
-    scale->setValueAndWarp(new_actual_scale);
+    *offset = new_offset;      // Animate to new offset
+    *scale = new_actual_scale; // Animate to new scale
 
     // Trigger redraw
     g_pHyprRenderer->damageMonitor(monitor);
@@ -433,6 +437,97 @@ void HTLayoutColumn::build_overview_layout(HTViewStage stage) {
     }
 }
 
+Vector2D HTLayoutColumn::clamp_offset_to_bounds(const Vector2D& off) {
+    if (num_columns == 0 || max_rows == 0)
+        return off;
+
+    const PHLMONITOR monitor = get_monitor();
+    if (monitor == nullptr)
+        return off;
+
+    // Calculate the bounds based on workspace grid at current scale
+    const CBox min_ws = calculate_ws_box(0, 0, HT_VIEW_ANIMATING);
+    const CBox max_ws = calculate_ws_box(num_columns - 1, max_rows - 1, HT_VIEW_ANIMATING);
+
+    // Find the bounding box of all workspaces
+    float min_x = min_ws.x;
+    float max_x = max_ws.x + max_ws.w;
+    float min_y = min_ws.y;
+    float max_y = max_ws.y + max_ws.h;
+
+    // Offset bounds: keep at least some portion of content visible
+    const Vector2D monitor_size = monitor->m_transformedSize;
+    float margin = 50.f;  // Keep at least this much content visible
+
+    Vector2D clamped = off;
+    // Offset is negative (panning left means positive offset change)
+    // We want: -max_x + margin <= offset.x <= -min_x + monitor_size.x - margin
+    double min_off_x = -(max_x - margin);
+    double max_off_x = -min_x + monitor_size.x - margin;
+    double min_off_y = -(max_y - margin);
+    double max_off_y = -min_y + monitor_size.y - margin;
+    clamped.x = std::clamp(clamped.x, min_off_x, max_off_x);
+    clamped.y = std::clamp(clamped.y, min_off_y, max_off_y);
+
+    return clamped;
+}
+
+void HTLayoutColumn::apply_edge_pan(PHLMONITOR monitor, float dt) {
+    const float THRESHOLD = HyprtileConfig::value<Hyprlang::FLOAT>("edge_pan_threshold");
+    const float SPEED = HyprtileConfig::value<Hyprlang::FLOAT>("edge_pan_speed");
+
+    if (THRESHOLD <= 0 || SPEED <= 0)
+        return;
+
+    // Get cursor position relative to monitor
+    const Vector2D mouse_coords = g_pInputManager->getMouseCoordsInternal();
+    if (!monitor->logicalBox().containsPoint(mouse_coords))
+        return;  // Cursor not on this monitor
+
+    const Vector2D local_cursor = (mouse_coords - monitor->m_position) * monitor->m_scale;
+    const Vector2D monitor_size = monitor->m_transformedSize;
+
+    // Calculate pan direction and intensity based on edge proximity
+    Vector2D pan_delta = {0, 0};
+
+    // Left edge - pan right (positive offset change) to reveal left content
+    if (local_cursor.x < THRESHOLD) {
+        float intensity = 1.f - (local_cursor.x / THRESHOLD);
+        pan_delta.x = SPEED * intensity * dt;
+    }
+    // Right edge - pan left (negative offset change) to reveal right content
+    else if (local_cursor.x > monitor_size.x - THRESHOLD) {
+        float intensity = 1.f - ((monitor_size.x - local_cursor.x) / THRESHOLD);
+        pan_delta.x = -SPEED * intensity * dt;
+    }
+
+    // Top edge - pan down (positive offset change) to reveal top content
+    if (local_cursor.y < THRESHOLD) {
+        float intensity = 1.f - (local_cursor.y / THRESHOLD);
+        pan_delta.y = SPEED * intensity * dt;
+    }
+    // Bottom edge - pan up (negative offset change) to reveal bottom content
+    else if (local_cursor.y > monitor_size.y - THRESHOLD) {
+        float intensity = 1.f - ((monitor_size.y - local_cursor.y) / THRESHOLD);
+        pan_delta.y = -SPEED * intensity * dt;
+    }
+
+    if (pan_delta.x == 0 && pan_delta.y == 0)
+        return;
+
+    // Apply pan and clamp to bounds
+    Vector2D new_offset = offset->value() + pan_delta;
+    new_offset = clamp_offset_to_bounds(new_offset);
+
+    // Only apply if offset actually changed
+    if ((new_offset - offset->value()).size() > 0.01f) {
+        offset->setValueAndWarp(new_offset);
+
+        // Schedule next frame to continue panning
+        g_pCompositor->scheduleFrameForMonitor(monitor);
+    }
+}
+
 void HTLayoutColumn::render() {
     HTLayoutBase::render();
     CScopeGuard x([this] { post_render(); });
@@ -443,6 +538,23 @@ void HTLayoutColumn::render() {
     const PHLMONITOR monitor = par_view->get_monitor();
     if (monitor == nullptr)
         return;
+
+    // Calculate delta time for edge panning
+    timespec current_time;
+    clock_gettime(CLOCK_MONOTONIC, &current_time);
+    float dt = 0.016f;  // Default to ~60fps
+    if (edge_pan_initialized) {
+        dt = (current_time.tv_sec - last_render_time.tv_sec)
+           + (current_time.tv_nsec - last_render_time.tv_nsec) / 1e9f;
+        dt = std::clamp(dt, 0.001f, 0.1f);  // Clamp to reasonable range
+    }
+    last_render_time = current_time;
+    edge_pan_initialized = true;
+
+    // Apply edge panning if overview is active and not closing
+    if (par_view->active && !par_view->closing) {
+        apply_edge_pan(monitor, dt);
+    }
 
     static auto PACTIVECOL = CConfigValue<Hyprlang::CUSTOMTYPE>("general:col.active_border");
     static auto PINACTIVECOL = CConfigValue<Hyprlang::CUSTOMTYPE>("general:col.inactive_border");
