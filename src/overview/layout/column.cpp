@@ -178,6 +178,16 @@ void HTLayoutColumn::on_show(CallbackFun on_complete) {
     if (monitor == nullptr)
         return;
 
+    // Rebuild layout to discover any new workspaces
+    build_overview_layout(HT_VIEW_CLOSED);
+
+    // Set initial position to current active workspace before animating
+    if (overview_layout.count(monitor->m_activeWorkspace->m_id)) {
+        offset->setValueAndWarp(-overview_layout[monitor->m_activeWorkspace->m_id].box.pos());
+    }
+    scale->setValueAndWarp(1.f);
+
+    // Now animate TO the overview view
     *scale = calculate_ws_box(0, 0, HT_VIEW_OPENED).w / monitor->m_transformedSize.x;
     *offset = {0, 0};
 }
