@@ -101,6 +101,11 @@ PHLWINDOWREF find_best_window_in_workspace(const std::string &target_workspace_n
             {
                 target_window = window;
             }
+            // only find windows with same floating state as the latest focused window
+            else if (window->m_isFloating != target_window->m_isFloating)
+            {
+                continue;
+            }
             else if (is_better_window_for_direction(window, target_window, direction))
             {
                 target_window = window;
@@ -135,14 +140,14 @@ std::string find_workspace_by_column(int target_column)
     return "";
 }
 
-// find previous workspace on different column on current monitor
+// find previous workspace on different column
 std::string find_previous_workspace(int current_column)
 {
     for (auto const &window : g_pCompositor->m_windowFocusHistory)
     {
         // TODO: is this really necessary?
-        if (!is_window_on_current_monitor(window))
-            continue;
+        // if (!is_window_on_current_monitor(window))
+        //     continue;
 
         const auto &workspace = window->m_workspace;
         const std::string &workspace_name = workspace->m_name;
