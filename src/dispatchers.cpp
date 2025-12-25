@@ -11,7 +11,6 @@
 #include <string>
 
 #include "globals.h"
-#include "overview/globals.hpp"
 #include "utils.h"
 
 bool focus_mode = false;
@@ -281,35 +280,6 @@ std::string get_workspace_in_direction(char direction)
 SDispatchResult dispatch_movefocus(std::string arg)
 {
     char direction = parse_move_arg(arg);
-
-    // Check if overview mode is active - redirect to overview navigation
-    if (ht_manager != nullptr)
-    {
-        const PHTVIEW cursor_view = ht_manager->get_view_from_cursor();
-        if (cursor_view != nullptr && cursor_view->active)
-        {
-            std::string direction_str;
-            switch (direction)
-            {
-            case 'l':
-                direction_str = "left";
-                break;
-            case 'r':
-                direction_str = "right";
-                break;
-            case 'u':
-                direction_str = "up";
-                break;
-            case 'd':
-                direction_str = "down";
-                break;
-            default:
-                return {.success = false, .error = "Invalid direction"};
-            }
-            cursor_view->move(direction_str, false);
-            return {};
-        }
-    }
 
     const auto PLASTWINDOW = g_pCompositor->m_lastWindow.lock();
 
