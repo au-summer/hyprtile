@@ -26,6 +26,9 @@
 
 #include "init.hpp"
 
+// Store callback handles to prevent them from being destroyed
+static std::vector<SP<HOOK_CALLBACK_FN>> g_callbackHandles;
+
 // ========== Overview Dispatchers ==========
 
 static SDispatchResult dispatch_if(std::string arg, bool is_active)
@@ -364,28 +367,37 @@ static void init_functions()
 
 static void register_callbacks()
 {
+    // Clear any existing callbacks
+    g_callbackHandles.clear();
+
+    // Helper lambda to register and store callback
+    auto registerCallback = [](const std::string& event, HOOK_CALLBACK_FN callback) {
+        g_callbackHandles.push_back(HyprlandAPI::registerCallbackDynamic(PHANDLE, event, callback));
+    };
+
     // Mouse input
-    HyprlandAPI::registerCallbackDynamic(PHANDLE, "mouseButton", on_mouse_button);
-    HyprlandAPI::registerCallbackDynamic(PHANDLE, "mouseMove", on_mouse_move);
-    HyprlandAPI::registerCallbackDynamic(PHANDLE, "mouseAxis", on_mouse_axis);
+    registerCallback("mouseButton", on_mouse_button);
+    registerCallback("mouseMove", on_mouse_move);
+    registerCallback("mouseAxis", on_mouse_axis);
 
     // Keyboard input
-    HyprlandAPI::registerCallbackDynamic(PHANDLE, "keyPress", on_key_press);
+    registerCallback("keyPress", on_key_press);
 
     // Touch input (TODO: proper support)
-    HyprlandAPI::registerCallbackDynamic(PHANDLE, "touchDown", cancel_event);
-    HyprlandAPI::registerCallbackDynamic(PHANDLE, "touchUp", cancel_event);
-    HyprlandAPI::registerCallbackDynamic(PHANDLE, "touchMove", cancel_event);
+    registerCallback("touchDown", cancel_event);
+    registerCallback("touchUp", cancel_event);
+    registerCallback("touchMove", cancel_event);
 
     // Gesture input
-    HyprlandAPI::registerCallbackDynamic(PHANDLE, "swipeBegin", on_swipe_begin);
-    HyprlandAPI::registerCallbackDynamic(PHANDLE, "swipeUpdate", on_swipe_update);
-    HyprlandAPI::registerCallbackDynamic(PHANDLE, "swipeEnd", on_swipe_end);
+    registerCallback("swipeBegin", on_swipe_begin);
+    registerCallback("swipeUpdate", on_swipe_update);
+    registerCallback("swipeEnd", on_swipe_end);
 
     // System events
-    HyprlandAPI::registerCallbackDynamic(PHANDLE, "configReloaded", on_config_reloaded);
-    HyprlandAPI::registerCallbackDynamic(
-        PHANDLE, "monitorAdded", [&](void *thisptr, SCallbackInfo &info, std::any data) { register_monitors(); });
+    registerCallback("configReloaded", on_config_reloaded);
+    registerCallback("monitorAdded", [](void *thisptr, SCallbackInfo &info, std::any data) {
+        register_monitors();
+    });
 }
 
 static void add_dispatchers()
