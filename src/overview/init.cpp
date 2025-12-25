@@ -236,6 +236,28 @@ static void cancel_event(void* thisptr, SCallbackInfo& info, std::any args) {
     info.cancelled = true;
 }
 
+static void on_key_press(void* thisptr, SCallbackInfo& info, std::any args) {
+    if (ht_manager == nullptr)
+        return;
+
+    // Check if any view is active
+    if (!ht_manager->has_active_view())
+        return;
+
+    const auto event_map = std::any_cast<std::unordered_map<std::string, std::any>>(args);
+    const auto event = std::any_cast<IKeyboard::SKeyEvent>(event_map.at("event"));
+
+    // Only handle key press, not release
+    if (event.state != WL_KEYBOARD_KEY_STATE_PRESSED)
+        return;
+
+    // Check for Escape key
+    if (event.keycode == KEY_ESC) {
+        ht_manager->hide_all_views();
+        info.cancelled = true;
+    }
+}
+
 // ========== Monitor Registration ==========
 
 static void register_monitors() {
@@ -326,19 +348,22 @@ static void register_callbacks() {
     static auto P2 = HyprlandAPI::registerCallbackDynamic(PHANDLE, "mouseMove", on_mouse_move);
     static auto P3 = HyprlandAPI::registerCallbackDynamic(PHANDLE, "mouseAxis", on_mouse_axis);
 
+    // Keyboard: close overview on Escape
+    static auto P4 = HyprlandAPI::registerCallbackDynamic(PHANDLE, "keyPress", on_key_press);
+
     // TODO: support touch
-    static auto P4 = HyprlandAPI::registerCallbackDynamic(PHANDLE, "touchDown", cancel_event);
-    static auto P5 = HyprlandAPI::registerCallbackDynamic(PHANDLE, "touchUp", cancel_event);
-    static auto P6 = HyprlandAPI::registerCallbackDynamic(PHANDLE, "touchMove", cancel_event);
+    static auto P5 = HyprlandAPI::registerCallbackDynamic(PHANDLE, "touchDown", cancel_event);
+    static auto P6 = HyprlandAPI::registerCallbackDynamic(PHANDLE, "touchUp", cancel_event);
+    static auto P7 = HyprlandAPI::registerCallbackDynamic(PHANDLE, "touchMove", cancel_event);
 
-    static auto P7 = HyprlandAPI::registerCallbackDynamic(PHANDLE, "swipeBegin", on_swipe_begin);
-    static auto P8 = HyprlandAPI::registerCallbackDynamic(PHANDLE, "swipeUpdate", on_swipe_update);
-    static auto P9 = HyprlandAPI::registerCallbackDynamic(PHANDLE, "swipeEnd", on_swipe_end);
+    static auto P8 = HyprlandAPI::registerCallbackDynamic(PHANDLE, "swipeBegin", on_swipe_begin);
+    static auto P9 = HyprlandAPI::registerCallbackDynamic(PHANDLE, "swipeUpdate", on_swipe_update);
+    static auto P10 = HyprlandAPI::registerCallbackDynamic(PHANDLE, "swipeEnd", on_swipe_end);
 
-    static auto P10 =
+    static auto P11 =
         HyprlandAPI::registerCallbackDynamic(PHANDLE, "configReloaded", on_config_reloaded);
 
-    static auto P11 = HyprlandAPI::registerCallbackDynamic(
+    static auto P12 = HyprlandAPI::registerCallbackDynamic(
         PHANDLE,
         "monitorAdded",
         [&](void* thisptr, SCallbackInfo& info, std::any data) { register_monitors(); }
