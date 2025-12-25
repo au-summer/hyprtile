@@ -37,6 +37,13 @@ class HTView {
     void move_id(WORKSPACEID ws_id, bool move_window);
     // arg is up, down, left, right;
     void move(std::string arg, bool move_window);
+
+  private:
+    // Hold references to workspaces during overview to prevent them from being destroyed
+    std::vector<PHLWORKSPACE> preserved_workspaces;
+
+    void preserve_workspaces();  // Mark workspaces as persistent when overview opens
+    void release_workspaces();   // Release persistence when overview closes
 };
 
 typedef SP<HTView> PHTVIEW;
