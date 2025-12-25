@@ -10,8 +10,10 @@
 
 #include "dispatchers.h"
 #include "utils.h"
-
 #include "globals.h"
+
+// Overview module
+#include "overview/init.hpp"
 
 APICALL EXPORT std::string PLUGIN_API_VERSION()
 {
@@ -160,11 +162,16 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle)
     // Dispatchers
     dispatchers::addDispatchers();
 
+    // Initialize overview module
+    overview::init();
+
     HyprlandAPI::reloadConfig();
 
-    return {"hyprtile", "tiled workspace management", "ausummer", "1.0"};
+    return {"hyprtile", "tiled workspace management with overview", "ausummer", "1.0"};
 }
 
 APICALL EXPORT void PLUGIN_EXIT()
 {
+    // Cleanup overview module
+    overview::exit();
 }
