@@ -499,7 +499,7 @@ void HTLayoutColumn::render()
     CBox monitor_box = {{0, 0}, monitor->m_transformedSize};
 
     CRectPassElement::SRectData data;
-    data.color = CHyprColor{HTConfig::value<Hyprlang::INT>("bg_color")}.stripA();
+    data.color = CHyprColor{HTConfig::value<Hyprlang::INT>("bg_color")};
     data.box = monitor_box;
     g_pHyprRenderer->m_renderPass.add(makeUnique<CRectPassElement>(data));
 

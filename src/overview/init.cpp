@@ -371,7 +371,7 @@ static void register_callbacks()
     g_callbackHandles.clear();
 
     // Helper lambda to register and store callback
-    auto registerCallback = [](const std::string& event, HOOK_CALLBACK_FN callback) {
+    auto registerCallback = [](const std::string &event, HOOK_CALLBACK_FN callback) {
         g_callbackHandles.push_back(HyprlandAPI::registerCallbackDynamic(PHANDLE, event, callback));
     };
 
@@ -395,9 +395,7 @@ static void register_callbacks()
 
     // System events
     registerCallback("configReloaded", on_config_reloaded);
-    registerCallback("monitorAdded", [](void *thisptr, SCallbackInfo &info, std::any data) {
-        register_monitors();
-    });
+    registerCallback("monitorAdded", [](void *thisptr, SCallbackInfo &info, std::any data) { register_monitors(); });
 }
 
 static void add_dispatchers()
@@ -423,7 +421,8 @@ static void init_config()
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:hyprtile:expo:layout", Hyprlang::STRING{"column"});
 
     // general
-    HyprlandAPI::addConfigValue(PHANDLE, "plugin:hyprtile:expo:bg_color", Hyprlang::INT{0xFF111111});
+    HyprlandAPI::addConfigValue(PHANDLE, "plugin:hyprtile:expo:bg_color",
+                                Hyprlang::INT{0x00000000}); // Transparent by default
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:hyprtile:expo:gap_size", Hyprlang::FLOAT{10.f});
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:hyprtile:expo:border_size", Hyprlang::FLOAT{4.f});
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:hyprtile:expo:exit_on_hovered", Hyprlang::INT{0});
