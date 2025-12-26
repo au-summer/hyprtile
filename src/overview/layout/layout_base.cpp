@@ -4,6 +4,7 @@
 #define private public
 #include <hyprland/src/config/ConfigManager.hpp>
 #include <hyprland/src/desktop/DesktopTypes.hpp>
+#include <hyprland/src/managers/animation/AnimationManager.hpp>
 #include <hyprland/src/managers/input/InputManager.hpp>
 #include <hyprland/src/render/Renderer.hpp>
 #include <hyprland/src/render/pass/ClearPassElement.hpp>
@@ -12,6 +13,7 @@
 #include <hyprland/protocols/wlr-layer-shell-unstable-v1.hpp>
 #include <hyprland/src/helpers/time/Time.hpp>
 
+#include "../config.hpp"
 #include "../globals.hpp"
 #include "../pass/pass_element.hpp"
 #include "../types.hpp"
@@ -19,7 +21,8 @@
 
 HTLayoutBase::HTLayoutBase(VIEWID new_view_id) : view_id(new_view_id)
 {
-    ;
+    g_pAnimationManager->createAnimation(1.f, focus_progress,
+                                         g_pConfigManager->getAnimationPropertyConfig("workspaces"), AVARDAMAGE_NONE);
 }
 
 void HTLayoutBase::on_move_swipe(Vector2D delta)
@@ -91,6 +94,77 @@ void HTLayoutBase::build_overview_layout(HTViewStage stage)
     ;
 }
 
+void HTLayoutBase::update_focus_state(HTViewStage stage)
+{
+    (void)stage;
+
+    const PHLMONITOR monitor = get_monitor();
+    if (monitor == nullptr || monitor->m_activeWorkspace == nullptr)
+        return;
+
+    const WORKSPACEID current_id = monitor->m_activeWorkspace->m_id;
+    const PHTVIEW view = ht_manager ? ht_manager->get_view_from_id(view_id) : nullptr;
+    const bool overview_active = view != nullptr && view->active && !view->closing;
+
+    if (!focus_inited)
+    {
+        focus_from = current_id;
+        focus_to = current_id;
+        focus_progress->setValueAndWarp(1.f);
+        focus_inited = true;
+        return;
+    }
+
+    if (!overview_active)
+    {
+        focus_from = current_id;
+        focus_to = current_id;
+        focus_progress->setValueAndWarp(1.f);
+        return;
+    }
+
+    if (current_id != focus_to)
+    {
+        focus_from = focus_to;
+        focus_to = current_id;
+        focus_progress->setValueAndWarp(0.f);
+        *focus_progress = 1.f;
+    }
+}
+
+float HTLayoutBase::focus_scale_for_id(WORKSPACEID workspace_id, HTViewStage stage)
+{
+    if (stage == HT_VIEW_CLOSED)
+        return 1.f;
+
+    const PHTVIEW view = ht_manager ? ht_manager->get_view_from_id(view_id) : nullptr;
+    if (view == nullptr || !view->active || view->closing)
+        return 1.f;
+
+    const float target_scale = HTConfig::value<Hyprlang::FLOAT>("focus_scale");
+    if (target_scale <= 0.f)
+        return 1.f;
+
+    const float t = focus_progress->value();
+    if (workspace_id == focus_to)
+        return std::lerp(1.f, target_scale, t);
+    if (workspace_id == focus_from)
+        return std::lerp(target_scale, 1.f, t);
+
+    return 1.f;
+}
+
+CBox HTLayoutBase::apply_focus_scale(const CBox &box, WORKSPACEID workspace_id, HTViewStage stage)
+{
+    const float scale = focus_scale_for_id(workspace_id, stage);
+    if (scale == 1.f)
+        return box;
+
+    const Vector2D center = box.pos() + box.size() / 2.f;
+    const Vector2D new_size = box.size() * scale;
+    return CBox{center - new_size / 2.f, new_size};
+}
+
 void HTLayoutBase::render()
 {
     // render three kinds of backgrounds
@@ -147,6 +221,15 @@ WORKSPACEID HTLayoutBase::get_ws_id_from_global(Vector2D pos)
         return WORKSPACE_INVALID;
 
     Vector2D relative_pos = (pos - monitor->m_position) * monitor->m_scale;
+
+    if (monitor->m_activeWorkspace != nullptr)
+    {
+        const WORKSPACEID active_id = monitor->m_activeWorkspace->m_id;
+        const auto it = overview_layout.find(active_id);
+        if (it != overview_layout.end() && it->second.box.containsPoint(relative_pos))
+            return active_id;
+    }
+
     for (const auto &[id, layout] : overview_layout)
         if (layout.box.containsPoint(relative_pos))
             return id;

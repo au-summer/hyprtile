@@ -18,6 +18,14 @@ class HTLayoutBase {
   protected:
     // Same as monitor_id of the parent view
     VIEWID view_id;
+    WORKSPACEID focus_from = WORKSPACE_INVALID;
+    WORKSPACEID focus_to = WORKSPACE_INVALID;
+    bool focus_inited = false;
+    PHLANIMVAR<float> focus_progress;
+
+    void update_focus_state(HTViewStage stage);
+    float focus_scale_for_id(WORKSPACEID workspace_id, HTViewStage stage);
+    CBox apply_focus_scale(const CBox& box, WORKSPACEID workspace_id, HTViewStage stage);
 
   public:
     using CallbackFun = Hyprutils::Animation::CBaseAnimatedVariable::CallbackFun;

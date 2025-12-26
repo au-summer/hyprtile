@@ -362,7 +362,17 @@ bool HTLayoutColumn::should_render_window(PHLWINDOW window)
 
 float HTLayoutColumn::drag_window_scale()
 {
-    return scale->value();
+    const PHLMONITOR monitor = get_monitor();
+    if (monitor == nullptr)
+        return 1.f;
+
+    const Vector2D mouse_coords = g_pInputManager->getMouseCoordsInternal();
+    const WORKSPACEID ws_id = get_ws_id_from_global(mouse_coords);
+    const auto it = overview_layout.find(ws_id);
+    if (it == overview_layout.end())
+        return scale->value();
+
+    return it->second.box.w / monitor->m_transformedSize.x;
 }
 
 void HTLayoutColumn::init_position()
@@ -442,6 +452,8 @@ void HTLayoutColumn::build_overview_layout(HTViewStage stage)
     if (monitor == nullptr)
         return;
 
+    update_focus_state(stage);
+
     rebuild_columns();
     overview_layout.clear();
 
@@ -463,7 +475,8 @@ void HTLayoutColumn::build_overview_layout(HTViewStage stage)
             }
 
             const CBox ws_box = calculate_ws_box(col_idx, row_idx, stage);
-            overview_layout[ws_id] = HTWorkspace{(int)col_idx, (int)row_idx, ws_box};
+            const CBox scaled_box = apply_focus_scale(ws_box, ws_id, stage);
+            overview_layout[ws_id] = HTWorkspace{(int)col_idx, (int)row_idx, scaled_box};
         }
     }
 
@@ -525,7 +538,8 @@ void HTLayoutColumn::render()
 
         // renderModif translation used by renderWorkspace is weird so need
         // to scale the translation up as well. Geometry is also calculated from pixel size and not transformed size??
-        CBox render_box = {{ws_layout.box.pos() / scale->value()}, ws_layout.box.size()};
+        const double render_scale = ws_layout.box.w / monitor->m_transformedSize.x;
+        CBox render_box = {{ws_layout.box.pos() / render_scale}, ws_layout.box.size()};
         if (monitor->m_transform % 2 == 1)
             std::swap(render_box.w, render_box.h);
 
@@ -583,7 +597,8 @@ void HTLayoutColumn::render()
             // renderModif translation used by renderWorkspace is weird so need
             // to scale the translation up as well. Geometry is also calculated from pixel size and not transformed
             // size??
-            CBox render_box = {{ws_box.pos() / scale->value()}, ws_box.size()};
+            const double render_scale = ws_box.w / monitor->m_transformedSize.x;
+            CBox render_box = {{ws_box.pos() / render_scale}, ws_box.size()};
             if (monitor->m_transform % 2 == 1)
                 std::swap(render_box.w, render_box.h);
 

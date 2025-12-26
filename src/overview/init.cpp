@@ -274,8 +274,8 @@ static void on_key_press(void *thisptr, SCallbackInfo &info, std::any args)
     if (event.state != WL_KEYBOARD_KEY_STATE_PRESSED)
         return;
 
-    // Check for Escape key
-    if (event.keycode == KEY_ESC)
+    // Check for Escape key and Enter key
+    if (event.keycode == KEY_ESC || event.keycode == KEY_ENTER)
     {
         ht_manager->hide_all_views();
         info.cancelled = true;
@@ -425,6 +425,7 @@ static void init_config()
                                 Hyprlang::INT{0x00000000}); // Transparent by default
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:hyprtile:expo:gap_size", Hyprlang::FLOAT{10.f});
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:hyprtile:expo:border_size", Hyprlang::FLOAT{4.f});
+    HyprlandAPI::addConfigValue(PHANDLE, "plugin:hyprtile:expo:focus_scale", Hyprlang::FLOAT{1.1f});
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:hyprtile:expo:exit_on_hovered", Hyprlang::INT{0});
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:hyprtile:expo:warp_on_move_window", Hyprlang::INT{1});
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:hyprtile:expo:close_overview_on_reload", Hyprlang::INT{1});
