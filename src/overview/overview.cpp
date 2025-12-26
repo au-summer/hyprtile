@@ -179,7 +179,8 @@ void HTView::move_id(WORKSPACEID ws_id, bool move_window)
 
     Hyprlang::INT warp;
 
-    monitor->changeWorkspace(other_workspace);
+    // nofocus = true to not change window focus history when navigation
+    monitor->changeWorkspace(other_workspace, false, false, true);
     if (move_window)
     {
         g_pCompositor->focusWindow(hovered_window);
