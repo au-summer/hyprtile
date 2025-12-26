@@ -14,6 +14,7 @@
 
 // Overview module
 #include "overview/init.hpp"
+#include "overview/globals.hpp"
 
 APICALL EXPORT std::string PLUGIN_API_VERSION()
 {
@@ -69,6 +70,12 @@ typedef void (*origStartAnimation)(CDesktopAnimationManager *, PHLWORKSPACE, CDe
 void hk_startAnimation(CDesktopAnimationManager *thisptr, PHLWORKSPACE ws,
                        CDesktopAnimationManager::eAnimationType type, bool left, bool instant)
 {
+    // Override animation if overview is active to prevent flickering
+    if (ht_manager && ht_manager->has_active_view())
+    {
+        instant = true;
+    }
+
     auto config = ws->m_alpha->getConfig();
     auto &style = config->pValues->internalStyle;
     auto original_style = config->pValues->internalStyle;

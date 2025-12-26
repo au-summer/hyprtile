@@ -13,6 +13,8 @@
 #include "globals.h"
 #include "utils.h"
 
+#include "overview/globals.hpp"
+
 bool focus_mode = false;
 
 namespace dispatchers
@@ -280,6 +282,40 @@ std::string get_workspace_in_direction(char direction)
 SDispatchResult dispatch_movefocus(std::string arg)
 {
     char direction = parse_move_arg(arg);
+
+    // If overview is active, repurpose movefocus to navigate workspaces
+    if (ht_manager && ht_manager->has_active_view())
+    {
+        const PHLMONITOR current_monitor = g_pCompositor->m_lastMonitor.lock();
+        if (current_monitor)
+        {
+            const PHTVIEW view = ht_manager->get_view_from_monitor(current_monitor);
+            if (view && view->active)
+            {
+                std::string dir;
+                switch (direction)
+                {
+                case 'l':
+                    dir = "left";
+                    break;
+                case 'r':
+                    dir = "right";
+                    break;
+                case 'u':
+                    dir = "up";
+                    break;
+                case 'd':
+                    dir = "down";
+                    break;
+                default:
+                    return {.success = false, .error = "Invalid direction"};
+                }
+
+                view->move(dir, false);
+                return {};
+            }
+        }
+    }
 
     const auto PLASTWINDOW = g_pCompositor->m_lastWindow.lock();
 
