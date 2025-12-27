@@ -104,7 +104,8 @@ void HTLayoutBase::update_focus_state(HTViewStage stage)
 
     const WORKSPACEID current_id = monitor->m_activeWorkspace->m_id;
     const PHTVIEW view = ht_manager ? ht_manager->get_view_from_id(view_id) : nullptr;
-    const bool overview_active = view != nullptr && view->active && !view->closing;
+    const bool overview_active = view != nullptr && view->active;
+    const bool is_closing = view != nullptr && view->closing;
 
     if (!focus_inited)
     {
@@ -115,11 +116,18 @@ void HTLayoutBase::update_focus_state(HTViewStage stage)
         return;
     }
 
+    // When overview is completely inactive, reset focus state
     if (!overview_active)
     {
         focus_from = current_id;
         focus_to = current_id;
         focus_progress->setValueAndWarp(1.f);
+        return;
+    }
+
+    // closing animation is handles by on_hide
+    if (is_closing)
+    {
         return;
     }
 
@@ -138,7 +146,7 @@ float HTLayoutBase::focus_scale_for_id(WORKSPACEID workspace_id, HTViewStage sta
         return 1.f;
 
     const PHTVIEW view = ht_manager ? ht_manager->get_view_from_id(view_id) : nullptr;
-    if (view == nullptr || !view->active || view->closing)
+    if (view == nullptr || !view->active)
         return 1.f;
 
     const float target_scale = HTConfig::value<Hyprlang::FLOAT>("focus_scale");

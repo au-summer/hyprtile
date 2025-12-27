@@ -276,6 +276,13 @@ void HTLayoutColumn::on_show(CallbackFun on_complete)
     }
     scale->setValueAndWarp(1.f);
 
+    // Set focus animation
+    const WORKSPACEID current_id = monitor->m_activeWorkspace->m_id;
+    focus_from = current_id;
+    focus_to = current_id;
+    focus_progress->setValueAndWarp(0.f);
+    *focus_progress = 1.f;
+
     // Animate to overview position
     *scale = calculate_ws_box(0, 0, HT_VIEW_OPENED).w / monitor->m_transformedSize.x;
     *offset = {0, 0};
@@ -291,6 +298,13 @@ void HTLayoutColumn::on_hide(CallbackFun on_complete)
     const PHLMONITOR monitor = get_monitor();
     if (monitor == nullptr)
         return;
+
+    // Set focus animation
+    const WORKSPACEID current_id = monitor->m_activeWorkspace->m_id;
+    focus_from = current_id;
+    focus_to = current_id;
+    focus_progress->setValueAndWarp(1.f);
+    *focus_progress = 0.f;
 
     build_overview_layout(HT_VIEW_CLOSED);
     *scale = 1.;
