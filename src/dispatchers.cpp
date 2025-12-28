@@ -204,9 +204,10 @@ SDispatchResult dispatch_workspace(std::string arg)
     {
     }
 
+    int target_column;
     try
     {
-        int target_column = std::stoi(arg);
+        target_column = std::stoi(arg);
     }
     catch (...)
     {
