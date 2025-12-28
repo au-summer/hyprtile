@@ -172,7 +172,9 @@ static uint32_t hook_is_solitary_blocked(void *thisptr, bool full)
     if (view == nullptr)
     {
         Debug::log(ERR, "[Hyprtile Overview] View is nullptr in hook_is_solitary_blocked");
-        (*(origIsSolitaryBlocked)is_solitary_blocked_hook->m_original)(thisptr, full);
+
+        // NOTE: hyprtasking did not return here, a bug
+        return (*(origIsSolitaryBlocked)is_solitary_blocked_hook->m_original)(thisptr, full);
     }
 
     if (view->active || view->navigating)

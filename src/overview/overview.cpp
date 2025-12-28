@@ -195,7 +195,7 @@ void HTView::move_id(WORKSPACEID ws_id, bool move_window)
     if (move_window)
     {
         g_pCompositor->focusWindow(hovered_window);
-        warp = *CConfigValue<Hyprlang::INT>("plugin:hyprtasking:warp_on_move_window");
+        warp = *CConfigValue<Hyprlang::INT>("plugin:hyprtile:expo:warp_on_move_window");
     }
     else
     {
@@ -233,7 +233,7 @@ PHLMONITOR HTView::get_monitor()
 {
     const PHLMONITOR monitor = g_pCompositor->getMonitorFromID(monitor_id);
     if (monitor == nullptr)
-        Debug::log(WARN, "[Hyprtasking] Returning null monitor from get_monitor!");
+        Debug::log(WARN, "[Hyprtile Overview] Returning null monitor from get_monitor!");
     return monitor;
 }
 

@@ -35,7 +35,14 @@ int name_to_column(const std::string &name)
         return -1;
     }
 
-    return std::stoi(clean_name.substr(0, end_pos));
+    try
+    {
+        return std::stoi(clean_name.substr(0, end_pos));
+    }
+    catch (...)
+    {
+        return -1;
+    }
 }
 
 int name_to_index(const std::string &name)

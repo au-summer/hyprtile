@@ -204,7 +204,14 @@ SDispatchResult dispatch_workspace(std::string arg)
     {
     }
 
-    int target_column = std::stoi(arg);
+    try
+    {
+        int target_column = std::stoi(arg);
+    }
+    catch (...)
+    {
+        return {.success = false, .error = "Invalid column number"};
+    }
 
     std::string workspace_name = find_workspace_by_column(target_column);
 
