@@ -1,20 +1,23 @@
 # Hyprtile
 
-A Hyprland plugin that brings tiling window concepts to workspace themselves. Organize your workspaces in a logical, two-dimensional grid where workspaces are arranged in vertical columns.
+A Hyprland plugin that extends tiling from windows to workspaces. Each workspace can have sub-workspaces for related work - because a single workspace shouldn't try to do everything.
 
 ## Concept
 
-Hyprtile organizes workspaces into **vertical columns** that are arranged horizontally across your screen. Think of it as applying tiling window manager principles to workspaces themselves.
+Hyprtile organizes workspaces in a 2D grid. Each workspace (1, 2, 3...) can have sub-workspaces (1a, 1b, 1c...) below it.
+
+- **Left/Right**: Switch between workspaces
+- **Up/Down**: Switch between sub-workspaces
 
 ```
-Column 1    Column 2    Column 3
-┌─────┐     ┌─────┐     ┌─────┐
-│  1  │     │  2  │     │  3  │
-├─────┤     ├─────┤     ├─────┤
-│ 1a  │     │ 2a  │     │ 3a  │
-├─────┤     ├─────┤     └─────┘
-│ 1b  │     │ 2b  │
-└─────┘     └─────┘
+Workspace 1    Workspace 2    Workspace 3
+┌─────┐        ┌─────┐        ┌─────┐
+│  1  │        │  2  │        │  3  │
+├─────┤        ├─────┤        ├─────┤
+│ 1a  │        │ 2a  │        │ 3a  │
+├─────┤        ├─────┤        └─────┘
+│ 1b  │        │ 2b  │
+└─────┘        └─────┘
 ```
 
 ## Features
