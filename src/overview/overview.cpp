@@ -87,10 +87,12 @@ void HTView::do_exit_behavior(bool exit_on_mouse)
     if (already_on_workspace)
     {
         PHLWINDOW pWindow = workspace->getLastFocusedWindow();
+        // if all windows have not been focused yet, fallback to first window
+        if (!pWindow)
+            pWindow = workspace->getFirstWindow();
+
         if (pWindow)
             g_pCompositor->focusWindow(pWindow);
-        else
-            g_pInputManager->refocus();
     }
 }
 
