@@ -1,0 +1,11 @@
+[repository]
+name = "Hyprtile"
+authors = ["ausummer"]
+
+[hyprtile]
+description = "A Hyprland plugin that extends tiling from windows to workspaces."
+authors = ["ausummer"]
+output = "hyprtile.so"
+build = [
+    "make"
+]
