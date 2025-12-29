@@ -89,6 +89,8 @@ void HTView::do_exit_behavior(bool exit_on_mouse)
         PHLWINDOW pWindow = workspace->getLastFocusedWindow();
         if (pWindow)
             g_pCompositor->focusWindow(pWindow);
+        else
+            g_pInputManager->refocus();
     }
 }
 
