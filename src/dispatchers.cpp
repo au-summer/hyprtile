@@ -148,8 +148,8 @@ std::string find_previous_workspace(int current_column)
     for (auto const &window : g_pCompositor->m_windowFocusHistory)
     {
         // TODO: is this really necessary?
-        // if (!is_window_on_current_monitor(window))
-        //     continue;
+        if (!is_window_on_current_monitor(window))
+            continue;
 
         const auto &workspace = window->m_workspace;
         const std::string &workspace_name = workspace->m_name;
