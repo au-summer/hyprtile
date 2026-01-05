@@ -471,8 +471,8 @@ void HTLayoutColumn::build_overview_layout(HTViewStage stage)
     rebuild_columns();
     overview_layout.clear();
 
-    const PHLMONITOR last_monitor = g_pCompositor->m_lastMonitor.lock();
-    g_pCompositor->setActiveMonitor(monitor);
+    const PHLMONITOR last_monitor = Desktop::focusState()->monitor();
+    Desktop::focusState()->rawMonitorFocus(monitor);
 
     for (size_t col_idx = 0; col_idx < columns.size(); col_idx++)
     {
@@ -495,7 +495,7 @@ void HTLayoutColumn::build_overview_layout(HTViewStage stage)
     }
 
     if (last_monitor != nullptr)
-        g_pCompositor->setActiveMonitor(last_monitor);
+        Desktop::focusState()->rawMonitorFocus(last_monitor);
 }
 
 void HTLayoutColumn::render()

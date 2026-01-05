@@ -53,8 +53,13 @@ static SDispatchResult dispatch_if(std::string arg, bool is_active)
 
     SDispatchResult res = DISPATCHER->second(DISPATCHARG);
 
-    Debug::log(LOG, "[Hyprtile Overview] passthrough dispatch: {} : {}{}", DISPATCHSTR, DISPATCHARG,
-               res.success ? "" : " -> " + res.error);
+    Log::logger->log(
+        LOG,
+        "[Hyprtile Overview] passthrough dispatch: {} : {}{}",
+        DISPATCHSTR,
+        DISPATCHARG,
+        res.success ? "" : " -> " + res.error
+    );
 
     return res;
 }
@@ -171,7 +176,7 @@ static uint32_t hook_is_solitary_blocked(void *thisptr, bool full)
     PHTVIEW view = ht_manager->get_view_from_cursor();
     if (view == nullptr)
     {
-        Debug::log(ERR, "[Hyprtile Overview] View is nullptr in hook_is_solitary_blocked");
+        Log::logger->log(Log::ERR, "[Hyprtile Overview] View is nullptr in hook_is_solitary_blocked");
 
         // NOTE: hyprtasking did not return here, a bug
         return (*(origIsSolitaryBlocked)is_solitary_blocked_hook->m_original)(thisptr, full);
@@ -301,8 +306,13 @@ static void register_monitors()
         }
         ht_manager->views.push_back(makeShared<HTView>(monitor->m_id));
 
-        Debug::log(LOG, "[Hyprtile Overview] Registering view for monitor {} with resolution {}x{}",
-                   monitor->m_description, monitor->m_transformedSize.x, monitor->m_transformedSize.y);
+        Log::logger->log(
+            LOG,
+            "[Hyprtile Overview] Registering view for monitor {} with resolution {}x{}",
+            monitor->m_description,
+            monitor->m_transformedSize.x,
+            monitor->m_transformedSize.y
+        );
     }
 }
 
@@ -319,7 +329,7 @@ static void on_config_reloaded(void *thisptr, SCallbackInfo &info, std::any args
         const Hyprlang::STRING new_layout = HTConfig::value<Hyprlang::STRING>("layout");
         if (HTConfig::value<Hyprlang::INT>("close_overview_on_reload") || view->layout->layout_name() != new_layout)
         {
-            Debug::log(LOG, "[Hyprtile Overview] Closing overview on config reload");
+            Log::logger->log(LOG, "[Hyprtile Overview] Closing overview on config reload");
             view->hide(false);
             view->change_layout(new_layout);
         }
@@ -336,17 +346,19 @@ static void init_functions()
     if (FNS1.empty())
         fail_exit("No renderWorkspace!");
     render_workspace_hook = HyprlandAPI::createFunctionHook(PHANDLE, FNS1[0].address, (void *)hook_render_workspace);
-    Debug::log(LOG, "[Hyprtile Overview] Attempting hook {}", FNS1[0].signature);
+    Log::logger->log(LOG, "[Hyprtile Overview] Attempting hook {}", FNS1[0].signature);
     success = render_workspace_hook->hook();
 
-    static auto FNS2 =
-        HyprlandAPI::findFunctionsByName(PHANDLE, "_ZN13CHyprRenderer18shouldRenderWindowEN9Hyprutils6Memory14CS"
-                                                  "haredPointerI7CWindowEENS2_I8CMonitorEE");
+    static auto FNS2 = HyprlandAPI::findFunctionsByName(
+        PHANDLE,
+        "_ZN13CHyprRenderer18shouldRenderWindowEN9Hyprutils6Memory14CS"
+        "haredPointerIN7Desktop4View7CWindowEEENS2_I8CMonitorEE"
+    );
     if (FNS2.empty())
         fail_exit("No shouldRenderWindow");
     should_render_window_hook =
         HyprlandAPI::createFunctionHook(PHANDLE, FNS2[0].address, (void *)hook_should_render_window);
-    Debug::log(LOG, "[Hyprtile Overview] Attempting hook {}", FNS2[0].signature);
+    Log::logger->log(LOG, "[Hyprtile Overview] Attempting hook {}", FNS2[0].signature);
     success = should_render_window_hook->hook() && success;
 
     static auto FNS3 = HyprlandAPI::findFunctionsByName(PHANDLE, "renderWindow");
@@ -360,7 +372,7 @@ static void init_functions()
 
     is_solitary_blocked_hook =
         HyprlandAPI::createFunctionHook(PHANDLE, FNS4[0].address, (void *)hook_is_solitary_blocked);
-    Debug::log(LOG, "[Hyprtile Overview] Attempting hook {}", FNS4[0].signature);
+    Log::logger->log(LOG, "[Hyprtile Overview] Attempting hook {}", FNS4[0].signature);
     success = is_solitary_blocked_hook->hook() && success;
 
     if (!success)
@@ -463,32 +475,30 @@ namespace overview
 
 void init()
 {
-    Debug::log(LOG, "[Hyprtile Overview] Initializing overview module...");
+    Log::logger->log(LOG, "[Hyprtile Overview] Initializing overview module...");
 
-    // Initialize manager
     if (ht_manager == nullptr)
         ht_manager = std::make_unique<HTManager>();
     else
         ht_manager->reset();
 
-    // Initialize config, dispatchers, callbacks, hooks, monitors
     init_config();
     add_dispatchers();
     register_callbacks();
     init_functions();
     register_monitors();
 
-    Debug::log(LOG, "[Hyprtile Overview] Overview module initialized");
+    Log::logger->log(LOG, "[Hyprtile Overview] Overview module initialized");
 }
 
 void exit()
 {
-    Debug::log(LOG, "[Hyprtile Overview] Cleaning up overview module...");
+    Log::logger->log(LOG, "[Hyprtile Overview] Cleaning up overview module...");
 
     if (ht_manager)
         ht_manager->reset();
 
-    Debug::log(LOG, "[Hyprtile Overview] Overview module cleaned up");
+    Log::logger->log(LOG, "[Hyprtile Overview] Overview module cleaned up");
 }
 
 } // namespace overview

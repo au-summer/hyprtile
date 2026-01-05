@@ -2,11 +2,16 @@
 
 #include <hyprland/src/plugins/HookSystem.hpp>
 #include <hyprland/src/plugins/PluginAPI.hpp>
+#include <hyprland/src/debug/log/Logger.hpp>
+#include <hyprland/src/desktop/state/FocusState.hpp>
+#include <hyprland/src/desktop/view/View.hpp>
 
 #include "manager.hpp"
 
 // Import PHANDLE from hyprtile's globals
 #include "../globals.h"
+
+inline constexpr auto LOG = Hyprutils::CLI::LOG_DEBUG;
 
 // Overview-specific hooks and globals
 inline CFunctionHook* render_workspace_hook = nullptr;
