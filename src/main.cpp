@@ -1,7 +1,7 @@
 #include <hyprland/src/Compositor.hpp>
 #include <hyprland/src/config/ConfigManager.hpp>
 #include <hyprland/src/desktop/DesktopTypes.hpp>
-#include <hyprland/src/desktop/Window.hpp>
+#include <hyprland/src/desktop/view/Window.hpp>
 #include <hyprland/src/helpers/Monitor.hpp>
 #include <hyprland/src/managers/animation/DesktopAnimationManager.hpp>
 #include <hyprland/src/plugins/PluginAPI.hpp>
@@ -9,12 +9,12 @@
 #include <hyprutils/animation/AnimatedVariable.hpp>
 
 #include "dispatchers.h"
-#include "utils.h"
 #include "globals.h"
+#include "utils.h"
 
 // Overview module
-#include "overview/init.hpp"
 #include "overview/globals.hpp"
+#include "overview/init.hpp"
 
 APICALL EXPORT std::string PLUGIN_API_VERSION()
 {
