@@ -3,9 +3,11 @@
 #include <climits>
 #include <hyprland/src/Compositor.hpp>
 #include <hyprland/src/SharedDefs.hpp>
-#include <hyprland/src/debug/Log.hpp>
+#include <hyprland/src/debug/log/Logger.hpp>
 #include <hyprland/src/desktop/DesktopTypes.hpp>
-#include <hyprland/src/desktop/Window.hpp>
+#include <hyprland/src/desktop/history/WindowHistoryTracker.hpp>
+#include <hyprland/src/desktop/state/FocusState.hpp>
+#include <hyprland/src/desktop/view/Window.hpp>
 #include <hyprland/src/helpers/Monitor.hpp>
 #include <hyprland/src/plugins/PluginAPI.hpp>
 #include <string>
@@ -34,9 +36,9 @@ char parse_move_arg(const std::string &arg)
         return '\0';
 }
 
-bool is_window_on_current_monitor(const PHLWINDOWREF &window)
+bool is_window_on_current_monitor(const PHLWINDOW &window)
 {
-    return window->m_monitor->m_id == g_pCompositor->m_lastMonitor->m_id;
+    return window->m_monitor->m_id == Desktop::focusState()->monitor()->m_id;
 }
 
 // check if we should use Hyprland's focus logic
@@ -62,7 +64,7 @@ bool should_use_hyprland_for_floating_focus(const PHLWINDOW &old_window, const P
 }
 
 // compare windows by position based on direction to find best window to focus
-bool is_better_window_for_direction(const PHLWINDOWREF &candidate, const PHLWINDOWREF &current_best, char direction)
+bool is_better_window_for_direction(const PHLWINDOW &candidate, const PHLWINDOW &current_best, char direction)
 {
     switch (direction)
     {
@@ -82,13 +84,17 @@ bool is_better_window_for_direction(const PHLWINDOWREF &candidate, const PHLWIND
 }
 
 // find best window to focus in target workspace based on direction
-PHLWINDOWREF find_best_window_in_workspace(const std::string &target_workspace_name, char direction)
+PHLWINDOW find_best_window_in_workspace(const std::string &target_workspace_name, char direction)
 {
-    bool found = false;
-    PHLWINDOWREF target_window;
+    PHLWINDOW target_window = nullptr;
 
-    for (auto const &window : g_pCompositor->m_windowFocusHistory)
+    const auto &history = Desktop::History::windowTracker()->fullHistory();
+    for (auto it = history.rbegin(); it != history.rend(); ++it)
     {
+        const auto window = it->lock();
+        if (!window || !window->m_isMapped)
+            continue;
+
         const std::string &window_workspace_name = window->m_workspace->m_name;
 
         if (window_workspace_name == target_workspace_name)
@@ -99,7 +105,7 @@ PHLWINDOWREF find_best_window_in_workspace(const std::string &target_workspace_n
                 return window;
             }
 
-            if (!found)
+            if (!target_window)
             {
                 target_window = window;
             }
@@ -112,19 +118,22 @@ PHLWINDOWREF find_best_window_in_workspace(const std::string &target_workspace_n
             {
                 target_window = window;
             }
-
-            found = true;
         }
     }
 
-    return found ? target_window : PHLWINDOWREF();
+    return target_window;
 }
 
 // find workspace in column latest visited
 std::string find_workspace_by_column(int target_column)
 {
-    for (auto const &window : g_pCompositor->m_windowFocusHistory)
+    const auto &history = Desktop::History::windowTracker()->fullHistory();
+    for (auto it = history.rbegin(); it != history.rend(); ++it)
     {
+        const auto window = it->lock();
+        if (!window || !window->m_isMapped)
+            continue;
+
         const auto &workspace = window->m_workspace;
         const std::string &workspace_name = workspace->m_name;
         int workspace_column = name_to_column(workspace_name);
@@ -145,8 +154,13 @@ std::string find_workspace_by_column(int target_column)
 // find previous workspace on different column
 std::string find_previous_workspace(int current_column)
 {
-    for (auto const &window : g_pCompositor->m_windowFocusHistory)
+    const auto &history = Desktop::History::windowTracker()->fullHistory();
+    for (auto it = history.rbegin(); it != history.rend(); ++it)
     {
+        const auto window = it->lock();
+        if (!window || !window->m_isMapped)
+            continue;
+
         // TODO: is this really necessary?
         if (!is_window_on_current_monitor(window))
             continue;
@@ -176,7 +190,7 @@ SDispatchResult dispatch_workspace(std::string arg)
         return {.success = false, .error = "Focus mode is enabled"};
     }
 
-    const std::string &current_workspace_name = g_pCompositor->m_lastMonitor->m_activeWorkspace->m_name;
+    const std::string &current_workspace_name = Desktop::focusState()->monitor()->m_activeWorkspace->m_name;
     int current_column = name_to_column(current_workspace_name);
 
     if (arg == "previous")
@@ -233,8 +247,13 @@ std::string find_horizontal_workspace(int current_column, bool search_left)
     int target_column = search_left ? 0 : INT_MAX;
     std::string target_workspace_name;
 
-    for (auto const &window : g_pCompositor->m_windowFocusHistory)
+    const auto &history = Desktop::History::windowTracker()->fullHistory();
+    for (auto it = history.rbegin(); it != history.rend(); ++it)
     {
+        const auto window = it->lock();
+        if (!window || !window->m_isMapped)
+            continue;
+
         if (!is_window_on_current_monitor(window))
             continue;
 
@@ -264,8 +283,7 @@ std::string find_horizontal_workspace(int current_column, bool search_left)
 std::string get_workspace_in_direction(char direction)
 {
     // NOTE: Only consider workspaces on the same monitor
-
-    const std::string &current_workspace_name = g_pCompositor->m_lastMonitor->m_activeWorkspace->m_name;
+    const std::string &current_workspace_name = Desktop::focusState()->monitor()->m_activeWorkspace->m_name;
     int current_column = name_to_column(current_workspace_name);
     int current_index = name_to_index(current_workspace_name);
 
@@ -294,7 +312,7 @@ SDispatchResult dispatch_movefocus(std::string arg)
     // If overview is active, repurpose movefocus to navigate workspaces
     if (ht_manager && ht_manager->has_active_view())
     {
-        const PHLMONITOR current_monitor = g_pCompositor->m_lastMonitor.lock();
+        const PHLMONITOR current_monitor = Desktop::focusState()->monitor();
         if (current_monitor)
         {
             const PHTVIEW view = ht_manager->get_view_from_monitor(current_monitor);
@@ -325,7 +343,7 @@ SDispatchResult dispatch_movefocus(std::string arg)
         }
     }
 
-    const auto PLASTWINDOW = g_pCompositor->m_lastWindow.lock();
+    const auto PLASTWINDOW = Desktop::focusState()->window();
 
     // If there is a window and a window to move focus to, handle it by hyprland
     if (PLASTWINDOW)
@@ -361,13 +379,11 @@ SDispatchResult dispatch_movefocus(std::string arg)
     if (!target_workspace_name.empty())
     {
         // Find the window in the workspace in direction
-        PHLWINDOWREF target_window = find_best_window_in_workspace(target_workspace_name, direction);
+        PHLWINDOW target_window = find_best_window_in_workspace(target_workspace_name, direction);
 
         // anim_type = direction;
         if (target_window)
         {
-            // g_pCompositor->focusWindow(target_window.lock());
-
             // Due to hide_special_on_workspace_change option, use hyprland's command instead
             HyprlandAPI::invokeHyprctlCommand("dispatch", "focuswindow address:" +
                                                               std::format("{:#x}", (uintptr_t)target_window.get()));
@@ -395,7 +411,7 @@ SDispatchResult dispatch_movewindow(std::string arg)
     // arg can be workspace num or direction
     char direction = parse_move_arg(arg);
 
-    const auto PLASTWINDOW = g_pCompositor->m_lastWindow.lock();
+    const auto PLASTWINDOW = Desktop::focusState()->window();
     if (!PLASTWINDOW)
         return {.success = false, .error = "Window to move not found"};
 
@@ -462,7 +478,7 @@ SDispatchResult move_to_workspace_impl(std::string arg, bool silent)
 
     int target_column = name_to_column(arg);
 
-    const std::string &current_workspace_name = g_pCompositor->m_lastMonitor->m_activeWorkspace->m_name;
+    const std::string &current_workspace_name = Desktop::focusState()->monitor()->m_activeWorkspace->m_name;
     int current_column = name_to_column(current_workspace_name);
 
     std::string workspace_name_to_use = find_workspace_by_column(target_column);
@@ -495,7 +511,7 @@ SDispatchResult dispatch_cleancurrentcolumn(std::string arg)
 {
     // check all the workspaces on this column
     // if there is empty ones, shrink others
-    const std::string &current_workspace_name = g_pCompositor->m_lastMonitor->m_activeWorkspace->m_name;
+    const std::string &current_workspace_name = Desktop::focusState()->monitor()->m_activeWorkspace->m_name;
     int current_column = name_to_column(current_workspace_name);
 
     // pair of (name, id)
@@ -540,7 +556,7 @@ SDispatchResult dispatch_cleancurrentcolumn(std::string arg)
 
 SDispatchResult dispatch_insertworkspace(std::string arg)
 {
-    const std::string &current_workspace_name = g_pCompositor->m_lastMonitor->m_activeWorkspace->m_name;
+    const std::string &current_workspace_name = Desktop::focusState()->monitor()->m_activeWorkspace->m_name;
     int current_column = name_to_column(current_workspace_name);
     int current_index = name_to_index(current_workspace_name);
 
@@ -599,10 +615,10 @@ SDispatchResult dispatch_moveworkspace(std::string arg)
         return {.success = false, .error = "Invalid direction for moveworkspace"};
     }
 
-    auto current_workspace_id = g_pCompositor->m_lastMonitor->m_activeWorkspace->m_id;
+    auto current_workspace_id = Desktop::focusState()->monitor()->m_activeWorkspace->m_id;
 
     // not a reference because it can be modified later
-    const std::string current_workspace_name = g_pCompositor->m_lastMonitor->m_activeWorkspace->m_name;
+    const std::string current_workspace_name = Desktop::focusState()->monitor()->m_activeWorkspace->m_name;
     int current_column = name_to_column(current_workspace_name);
     int current_index = name_to_index(current_workspace_name);
 
@@ -646,7 +662,7 @@ SDispatchResult dispatch_movecurrentcolumntomonitor(std::string arg)
 {
     char direction = parse_move_arg(arg);
 
-    const auto &current_workspace_name = g_pCompositor->m_lastMonitor->m_activeWorkspace->m_name;
+    const auto &current_workspace_name = Desktop::focusState()->monitor()->m_activeWorkspace->m_name;
     const auto current_column = name_to_column(current_workspace_name);
 
     // Here we move other workspaces in the column first, then the current one
