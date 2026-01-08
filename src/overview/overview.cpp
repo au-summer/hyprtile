@@ -78,15 +78,16 @@ void HTView::do_exit_behavior(bool exit_on_mouse)
     if (workspace == nullptr)
         return;
 
-    const bool already_on_workspace = (monitor->m_activeWorkspace == workspace);
-
     monitor->changeWorkspace(workspace);
 
     // manually focus window if we are already on the workspace
     // changeWorkspace won't do it because we have moved to it with nofocus = true before
-    if (already_on_workspace)
+
+    // only for the view on current monitor
+    if (g_pCompositor->getMonitorFromCursor() == monitor)
     {
         PHLWINDOW pWindow = workspace->getLastFocusedWindow();
+
         // if all windows have not been focused yet, fallback to first window
         if (!pWindow)
             pWindow = workspace->getFirstWindow();
