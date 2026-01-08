@@ -16,6 +16,8 @@
 #include "overview/globals.hpp"
 #include "overview/init.hpp"
 
+#include <iostream>
+
 APICALL EXPORT std::string PLUGIN_API_VERSION()
 {
     return HYPRLAND_API_VERSION;
@@ -62,6 +64,20 @@ void hk_changeWorkspace(CMonitor *thisptr, const PHLWORKSPACE &pWorkspace, bool 
     (*(origChangeWorkspace)g_pChangeWorkspaceHook->m_original)(thisptr, pWorkspace, internal, noMouseMove, noFocus);
 
     anim_type = '\0';
+}
+
+inline CFunctionHook *g_pChangeWorkspaceIDHook = nullptr;
+typedef void (*origChangeWorkspaceID)(CMonitor *, const WORKSPACEID &, bool, bool, bool);
+void hk_changeWorkspaceID(CMonitor *thisptr, const WORKSPACEID &id, bool internal, bool noMouseMove, bool noFocus)
+{
+    for (auto const &workspace : g_pCompositor->getWorkspaces())
+    {
+        if (workspace->m_id == id)
+        {
+            hk_changeWorkspace(thisptr, workspace.lock(), internal, noMouseMove, noFocus);
+            return;
+        }
+    }
 }
 
 inline CFunctionHook *g_pStartAnimationHook = nullptr;
@@ -151,9 +167,17 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle)
     }
 
     // Function Hooks
-    static const auto CHANGE_WORKSPACE = HyprlandAPI::findFunctionsByName(PHANDLE, "changeWorkspace");
+    // static const auto CHANGE_WORKSPACE = HyprlandAPI::findFunctionsByName(PHANDLE, "changeWorkspace");
+    static const auto CHANGE_WORKSPACE_ID =
+        HyprlandAPI::findFunctionsByName(PHANDLE, "_ZN8CMonitor15changeWorkspaceERKlbbb");
+    g_pChangeWorkspaceIDHook =
+        HyprlandAPI::createFunctionHook(PHANDLE, CHANGE_WORKSPACE_ID[0].address, (void *)&hk_changeWorkspaceID);
+    g_pChangeWorkspaceIDHook->hook();
+
+    static const auto CHANGE_WORKSPACE = HyprlandAPI::findFunctionsByName(
+        PHANDLE, "_ZN8CMonitor15changeWorkspaceERKN9Hyprutils6Memory14CSharedPointerI10CWorkspaceEEbbb");
     g_pChangeWorkspaceHook =
-        HyprlandAPI::createFunctionHook(PHANDLE, CHANGE_WORKSPACE[1].address, (void *)&hk_changeWorkspace);
+        HyprlandAPI::createFunctionHook(PHANDLE, CHANGE_WORKSPACE[0].address, (void *)&hk_changeWorkspace);
     g_pChangeWorkspaceHook->hook();
 
     static const auto START_ANIMATION = HyprlandAPI::findFunctionsByName(PHANDLE, "startAnimation");
