@@ -1,7 +1,6 @@
 #include "column.hpp"
 
 #include <algorithm>
-#include <ctime>
 #include <hyprland/src/Compositor.hpp>
 #include <hyprland/src/config/ConfigManager.hpp>
 #include <hyprland/src/config/ConfigValue.hpp>
@@ -10,6 +9,7 @@
 #include <hyprland/src/managers/animation/AnimationManager.hpp>
 #include <hyprland/src/managers/animation/DesktopAnimationManager.hpp>
 #include <hyprland/src/managers/input/InputManager.hpp>
+#include <hyprland/src/layout/LayoutManager.hpp>
 #include <hyprland/src/render/OpenGL.hpp>
 #include <hyprland/src/render/Renderer.hpp>
 #include <hyprland/src/render/pass/BorderPassElement.hpp>
@@ -358,7 +358,8 @@ bool HTLayoutColumn::should_render_window(PHLWINDOW window)
     if (window == nullptr || monitor == nullptr)
         return ori_result;
 
-    if (window == g_pInputManager->m_currentlyDraggedWindow.lock())
+    const SP<Layout::ITarget> target = g_layoutManager->dragController()->target();
+    if (target != nullptr && window == target->window())
         return false;
 
     PHLWORKSPACE workspace = window->m_workspace;
@@ -518,8 +519,7 @@ void HTLayoutColumn::render()
 
     const float BORDERSIZE = HTConfig::value<Hyprlang::FLOAT>("border_size");
 
-    timespec time;
-    clock_gettime(CLOCK_MONOTONIC, &time);
+	const auto time = Time::steadyNow();
 
     g_pHyprRenderer->damageMonitor(monitor);
     g_pHyprOpenGL->m_renderData.pCurrentMonData->blurFBShouldRender = true;
@@ -581,7 +581,7 @@ void HTLayoutColumn::render()
                                                        true);
             workspace->m_visible = true;
 
-            ((render_workspace_t)(render_workspace_hook->m_original))(g_pHyprRenderer.get(), monitor, workspace, &time,
+            ((render_workspace_t)(render_workspace_hook->m_original))(g_pHyprRenderer.get(), monitor, workspace, time,
                                                                       render_box);
 
             g_pDesktopAnimationManager->startAnimation(workspace, CDesktopAnimationManager::ANIMATION_TYPE_OUT, false,
@@ -591,7 +591,7 @@ void HTLayoutColumn::render()
         else
         {
             // If pWorkspace is null, then just render the layers
-            ((render_workspace_t)(render_workspace_hook->m_original))(g_pHyprRenderer.get(), monitor, workspace, &time,
+            ((render_workspace_t)(render_workspace_hook->m_original))(g_pHyprRenderer.get(), monitor, workspace, time,
                                                                       render_box);
         }
     }
@@ -627,14 +627,17 @@ void HTLayoutColumn::render()
             g_pHyprRenderer->m_renderPass.add(makeUnique<CBorderPassElement>(bdata));
 
             ((render_workspace_t)(render_workspace_hook->m_original))(g_pHyprRenderer.get(), monitor, start_workspace,
-                                                                      &time, render_box);
+                                                                      time, render_box);
         }
     }
 
     const PHTVIEW cursor_view = ht_manager->get_view_from_cursor();
     if (cursor_view == nullptr)
         return;
-    const PHLWINDOW dragged_window = g_pInputManager->m_currentlyDraggedWindow.lock();
+    const SP<Layout::ITarget> target = g_layoutManager->dragController()->target();
+    if (target == nullptr)
+        return;
+    const PHLWINDOW dragged_window = target->window();
     if (dragged_window == nullptr)
         return;
     const Vector2D mouse_coords = g_pInputManager->getMouseCoordsInternal();
@@ -643,5 +646,5 @@ void HTLayoutColumn::render()
                                 .scale(cursor_view->layout->drag_window_scale())
                                 .translate(mouse_coords);
     if (!window_box.intersection(monitor->logicalBox()).empty())
-        render_window_at_box(dragged_window, monitor, &time, window_box);
+        render_window_at_box(dragged_window, monitor, time, window_box);
 }
