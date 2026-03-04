@@ -13,7 +13,7 @@
 #include "types.hpp"
 
 // Note: box is relative to (0, 0), not monitor
-void render_window_at_box(PHLWINDOW window, PHLMONITOR monitor, const Time::steady_tp& time, const CBox& box)
+void render_window_at_box(PHLWINDOW window, PHLMONITOR monitor, const Time::steady_tp& time, CBox box) {
     if (!window || !monitor)
         return;
 
