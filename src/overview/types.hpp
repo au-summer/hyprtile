@@ -9,7 +9,7 @@ typedef void (*render_workspace_t)(
     void* thisptr,
     PHLMONITOR pMonitor,
     PHLWORKSPACE pWorkspace,
-    timespec* now,
+    const Time::steady_tp& now,
     const CBox& geometry
 );
 
@@ -19,7 +19,7 @@ typedef void (*render_window_t)(
     void* thisptr,
     PHLWINDOW pWindow,
     PHLMONITOR pMonitor,
-    timespec* time,
+    const Time::steady_tp& now,
     bool decorate,
     eRenderPassMode mode,
     bool ignorePosition,
