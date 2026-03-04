@@ -1,0 +1,7 @@
+build/
+.cache/
+.direnv/
+.envrc
+compile_commands.json
+reload.sh
+
