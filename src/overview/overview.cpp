@@ -8,6 +8,7 @@
 #include <hyprland/src/managers/input/InputManager.hpp>
 #include <hyprland/src/render/OpenGL.hpp>
 #include <hyprland/src/render/Renderer.hpp>
+#include <hyprland/src/desktop/state/FocusState.hpp>
 #include <hyprutils/math/Box.hpp>
 
 #include "config.hpp"
@@ -93,7 +94,7 @@ void HTView::do_exit_behavior(bool exit_on_mouse)
             pWindow = workspace->getFirstWindow();
 
         if (pWindow)
-            Desktop::focusState()->fullWindowFocus(pWindow);
+        	Desktop::focusState()->fullWindowFocus(pWindow, Desktop::FOCUS_REASON_CLICK);
     }
 }
 
@@ -197,7 +198,7 @@ void HTView::move_id(WORKSPACEID ws_id, bool move_window)
     monitor->changeWorkspace(other_workspace, false, false, true);
     if (move_window)
     {
-        Desktop::focusState()->fullWindowFocus(hovered_window);
+        Desktop::focusState()->fullWindowFocus(hovered_window, Desktop::FOCUS_REASON_CLICK);
         warp = *CConfigValue<Hyprlang::INT>("plugin:hyprtile:expo:warp_on_move_window");
     }
     else
