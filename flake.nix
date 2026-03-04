@@ -1,56 +1,23 @@
 {
   description = "Hyprtile";
 
-  inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
-    systems.url = "github:nix-systems/default-linux";
-  };
+  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
 
-  outputs =
-    {
-      self,
-      nixpkgs,
-      systems,
-      ...
-    }:
+  outputs = { self, nixpkgs, ... }:
     let
-      inherit (nixpkgs) lib;
-
-      forSystems =
-        attrs: lib.genAttrs (import systems) (system: attrs system nixpkgs.legacyPackages.${system});
-    in
-    {
-      packages = forSystems (
-        system: pkgs: {
-          hyprtile =
-            let
-              hyprlandPkg = pkgs.hyprland;
-            in
-            pkgs.gcc14Stdenv.mkDerivation {
-              pname = "hyprtile";
-              version = "0.1";
-
-              src = ./.;
-
-              nativeBuildInputs = [
-                pkgs.meson
-                pkgs.ninja
-                pkgs.pkg-config
-              ]
-              ++ hyprlandPkg.nativeBuildInputs;
-
-              buildInputs = [ hyprlandPkg ] ++ hyprlandPkg.buildInputs;
-
-              meta = with lib; {
-                homepage = "https://github.com/au-summer/hyprtile";
-                description = "A Hyprland plugin that extends tiling from windows to workspaces";
-                license = licenses.bsd3;
-                platforms = platforms.linux;
-              };
-            };
-
-          default = self.packages.${system}.hyprtile;
-        }
-      );
+      forSystems = f: nixpkgs.lib.genAttrs [ "x86_64-linux" "aarch64-linux" ]
+        (system: f nixpkgs.legacyPackages.${system});
+    in {
+      packages = forSystems (pkgs: {
+        hyprtile = pkgs.gcc14Stdenv.mkDerivation {
+          pname = "hyprtile";
+          version = "0.1";
+          src = ./.;
+          nativeBuildInputs = [ pkgs.meson pkgs.ninja pkgs.pkg-config ]
+            ++ pkgs.hyprland.nativeBuildInputs;
+          buildInputs = [ pkgs.hyprland ] ++ pkgs.hyprland.buildInputs;
+        };
+        default = self.packages.${pkgs.system}.hyprtile;
+      });
     };
 }
