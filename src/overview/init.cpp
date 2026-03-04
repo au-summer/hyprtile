@@ -1,6 +1,5 @@
 #include <linux/input-event-codes.h>
 
-#include <ctime>
 #include <hyprland/src/Compositor.hpp>
 #include <hyprland/src/SharedDefs.hpp>
 #include <hyprland/src/desktop/DesktopTypes.hpp>
@@ -8,13 +7,14 @@
 #include <hyprland/src/helpers/Monitor.hpp>
 #include <hyprland/src/macros.hpp>
 #include <hyprland/src/managers/KeybindManager.hpp>
-#include <hyprland/src/managers/LayoutManager.hpp>
+#include <hyprland/src/layout/LayoutManager.hpp>
 #include <hyprland/src/managers/PointerManager.hpp>
 #include <hyprland/src/managers/input/InputManager.hpp>
 #include <hyprland/src/plugins/HookSystem.hpp>
 #include <hyprland/src/plugins/PluginAPI.hpp>
 #include <hyprland/src/plugins/PluginSystem.hpp>
 #include <hyprland/src/render/Renderer.hpp>
+#include <hyprland/src/event/EventBus.hpp>
 #include <hyprlang.hpp>
 #include <hyprutils/math/Box.hpp>
 #include <hyprutils/math/Vector2D.hpp>
@@ -26,8 +26,8 @@
 
 #include "init.hpp"
 
-// Store callback handles to prevent them from being destroyed
-static std::vector<SP<HOOK_CALLBACK_FN>> g_callbackHandles;
+// Store event listeners to prevent them from being destroyed
+static std::vector<std::any> g_eventListeners;
 
 // ========== Overview Dispatchers ==========
 
@@ -141,7 +141,7 @@ static SDispatchResult dispatch_kill_hover(std::string arg)
 
 // ========== Overview Hooks ==========
 
-static void hook_render_workspace(void *thisptr, PHLMONITOR monitor, PHLWORKSPACE workspace, timespec *now,
+static void hook_render_workspace(void *thisptr, PHLMONITOR monitor, PHLWORKSPACE workspace, const Time::steady_tp &now,
                                   const CBox &geometry)
 {
     if (ht_manager == nullptr)
@@ -191,7 +191,7 @@ static uint32_t hook_is_solitary_blocked(void *thisptr, bool full)
 
 // ========== Overview Mouse/Touch Callbacks ==========
 
-static void on_mouse_button(void *thisptr, SCallbackInfo &info, std::any args)
+static void on_mouse_button(IPointer::SButtonEvent e, Event::SCallbackInfo& info)
 {
     if (ht_manager == nullptr)
         return;
@@ -200,7 +200,6 @@ static void on_mouse_button(void *thisptr, SCallbackInfo &info, std::any args)
     if (cursor_view == nullptr)
         return;
 
-    const auto e = std::any_cast<IPointer::SButtonEvent>(args);
     const bool pressed = e.state == WL_POINTER_BUTTON_STATE_PRESSED;
 
     const unsigned int drag_button = HTConfig::value<Hyprlang::INT>("drag_button");
@@ -220,52 +219,49 @@ static void on_mouse_button(void *thisptr, SCallbackInfo &info, std::any args)
     }
 }
 
-static void on_mouse_move(void *thisptr, SCallbackInfo &info, std::any args)
+static void on_mouse_move(Vector2D c, Event::SCallbackInfo& info) 
 {
     if (ht_manager == nullptr)
         return;
     info.cancelled = ht_manager->on_mouse_move();
 }
 
-static void on_mouse_axis(void *thisptr, SCallbackInfo &info, std::any args)
+static void on_mouse_axis(IPointer::SAxisEvent e, Event::SCallbackInfo& info)
 {
     if (ht_manager == nullptr)
         return;
-    const auto e =
-        std::any_cast<IPointer::SAxisEvent>(std::any_cast<std::unordered_map<std::string, std::any>>(args)["event"]);
     info.cancelled = ht_manager->on_mouse_axis(e.delta);
 }
 
-static void on_swipe_begin(void *thisptr, SCallbackInfo &info, std::any args)
+static void on_swipe_begin(IPointer::SSwipeBeginEvent e, Event::SCallbackInfo& info)
 {
     if (ht_manager == nullptr)
         return;
     ht_manager->swipe_start();
 }
 
-static void on_swipe_update(void *thisptr, SCallbackInfo &info, std::any args)
+static void on_swipe_update(IPointer::SSwipeUpdateEvent e, Event::SCallbackInfo& info)
 {
     if (ht_manager == nullptr)
         return;
-    auto e = std::any_cast<IPointer::SSwipeUpdateEvent>(args);
     info.cancelled = ht_manager->swipe_update(e);
 }
 
-static void on_swipe_end(void *thisptr, SCallbackInfo &info, std::any args)
+static void on_swipe_end(IPointer::SSwipeEndEvent e, Event::SCallbackInfo& info)
 {
     if (ht_manager == nullptr)
         return;
     info.cancelled = ht_manager->swipe_end();
 }
 
-static void cancel_event(void *thisptr, SCallbackInfo &info, std::any args)
+static void cancel_event(Event::SCallbackInfo& info)
 {
     if (ht_manager == nullptr || !ht_manager->cursor_view_active())
         return;
     info.cancelled = true;
 }
 
-static void on_key_press(void *thisptr, SCallbackInfo &info, std::any args)
+static void on_key_press(IKeyboard::SKeyEvent event, Event::SCallbackInfo &info)
 {
     if (ht_manager == nullptr)
         return;
@@ -273,9 +269,6 @@ static void on_key_press(void *thisptr, SCallbackInfo &info, std::any args)
     // Check if any view is active
     if (!ht_manager->has_active_view())
         return;
-
-    const auto event_map = std::any_cast<std::unordered_map<std::string, std::any>>(args);
-    const auto event = std::any_cast<IKeyboard::SKeyEvent>(event_map.at("event"));
 
     // Only handle key press, not release
     if (event.state != WL_KEYBOARD_KEY_STATE_PRESSED)
@@ -316,7 +309,7 @@ static void register_monitors()
     }
 }
 
-static void on_config_reloaded(void *thisptr, SCallbackInfo &info, std::any args)
+static void on_config_reloaded()
 {
     if (ht_manager == nullptr)
         return;
@@ -361,14 +354,20 @@ static void init_functions()
     Log::logger->log(LOG, "[Hyprtile Overview] Attempting hook {}", FNS2[0].signature);
     success = should_render_window_hook->hook() && success;
 
-    static auto FNS3 = HyprlandAPI::findFunctionsByName(PHANDLE, "renderWindow");
+    static auto FNS3 = HyprlandAPI::findFunctionsByName(
+        PHANDLE,
+        "_ZN13CHyprRenderer12renderWindowEN9Hyprutils6Memory14CSha"
+        "redPointerIN7Desktop4View7CWindowEEENS2_I8CMonitorEERKNSt"
+        "6chrono10time_pointINS9_3_V212steady_clockENS9_8durationI"
+        "lSt5ratioILl1ELl1000000000EEEEEEb15eRenderPassModebb"
+    );
     if (FNS3.empty())
         fail_exit("No renderWindow");
     render_window = FNS3[0].address;
 
     static auto FNS4 = HyprlandAPI::findFunctionsByName(PHANDLE, "isSolitaryBlocked");
     if (FNS4.empty())
-        fail_exit("No isSolitaryBlocked!");
+        fail_exit("No isSolitaryBlocked");
 
     is_solitary_blocked_hook =
         HyprlandAPI::createFunctionHook(PHANDLE, FNS4[0].address, (void *)hook_is_solitary_blocked);
@@ -381,35 +380,27 @@ static void init_functions()
 
 static void register_callbacks()
 {
-    // Clear any existing callbacks
-    g_callbackHandles.clear();
+    auto& bus = Event::bus()->m_events;
 
-    // Helper lambda to register and store callback
-    auto registerCallback = [](const std::string &event, HOOK_CALLBACK_FN callback) {
-        g_callbackHandles.push_back(HyprlandAPI::registerCallbackDynamic(PHANDLE, event, callback));
+    g_eventListeners = {
+        bus.input.mouse.button.listen(on_mouse_button),
+        bus.input.mouse.move.listen(on_mouse_move),
+        bus.input.mouse.axis.listen(on_mouse_axis),
+
+    	// TODO: support touch
+        bus.input.touch.down.listen([](ITouch::SDownEvent e, Event::SCallbackInfo &i) { cancel_event(i); }),
+        bus.input.touch.up.listen([](ITouch::SUpEvent e, Event::SCallbackInfo &i) { cancel_event(i); }),
+        bus.input.touch.motion.listen([](ITouch::SMotionEvent e, Event::SCallbackInfo &i) { cancel_event(i); }),
+
+        bus.gesture.swipe.begin.listen(on_swipe_begin),
+        bus.gesture.swipe.update.listen(on_swipe_update),
+        bus.gesture.swipe.end.listen(on_swipe_end),
+
+        bus.config.reloaded.listen(on_config_reloaded),
+        bus.monitor.added.listen([](PHLMONITOR m) { register_monitors(); }),
+
+        bus.input.keyboard.key.listen(on_key_press),
     };
-
-    // Mouse input
-    registerCallback("mouseButton", on_mouse_button);
-    registerCallback("mouseMove", on_mouse_move);
-    registerCallback("mouseAxis", on_mouse_axis);
-
-    // Keyboard input
-    registerCallback("keyPress", on_key_press);
-
-    // Touch input (TODO: proper support)
-    registerCallback("touchDown", cancel_event);
-    registerCallback("touchUp", cancel_event);
-    registerCallback("touchMove", cancel_event);
-
-    // Gesture input
-    registerCallback("swipeBegin", on_swipe_begin);
-    registerCallback("swipeUpdate", on_swipe_update);
-    registerCallback("swipeEnd", on_swipe_end);
-
-    // System events
-    registerCallback("configReloaded", on_config_reloaded);
-    registerCallback("monitorAdded", [](void *thisptr, SCallbackInfo &info, std::any data) { register_monitors(); });
 }
 
 static void add_dispatchers()
