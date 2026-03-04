@@ -9,6 +9,7 @@
 #include <hyprland/src/desktop/state/FocusState.hpp>
 #include <hyprland/src/desktop/view/Window.hpp>
 #include <hyprland/src/helpers/Monitor.hpp>
+#include <hyprland/src/helpers/math/Direction.hpp>
 #include <hyprland/src/plugins/PluginAPI.hpp>
 #include <string>
 
@@ -34,6 +35,23 @@ char parse_move_arg(const std::string &arg)
         return 'd';
     else
         return '\0';
+}
+
+Math::eDirection direction_char_to_enum(char direction)
+{
+	switch (direction)
+	{
+	case 'l':
+		return Math::eDirection::DIRECTION_LEFT;
+	case 'r':
+		return Math::eDirection::DIRECTION_RIGHT;
+	case 'u':
+		return Math::eDirection::DIRECTION_UP;
+	case 'd':
+		return Math::eDirection::DIRECTION_DOWN;
+	default:
+		return Math::eDirection::DIRECTION_DEFAULT;
+	}
 }
 
 bool is_window_on_current_monitor(const PHLWINDOW &window)
@@ -348,7 +366,7 @@ SDispatchResult dispatch_movefocus(std::string arg)
     // If there is a window and a window to move focus to, handle it by hyprland
     if (PLASTWINDOW)
     {
-        const auto PWINDOWTOCHANGETO = g_pCompositor->getWindowInDirection(PLASTWINDOW, direction);
+        const auto PWINDOWTOCHANGETO = g_pCompositor->getWindowInDirection(PLASTWINDOW, direction_char_to_enum(direction));
 
         // Found window in direction and on same workspace, switch to it
         if (PWINDOWTOCHANGETO && PWINDOWTOCHANGETO->m_workspace->m_id == PLASTWINDOW->m_workspace->m_id)
@@ -442,7 +460,7 @@ SDispatchResult dispatch_movewindow(std::string arg)
         }
     }
 
-    const auto PWINDOWTOCHANGETO = g_pCompositor->getWindowInDirection(PLASTWINDOW, direction);
+    const auto PWINDOWTOCHANGETO = g_pCompositor->getWindowInDirection(PLASTWINDOW, direction_char_to_enum(direction));
     // Found window in direction and on same workspace
     if (PWINDOWTOCHANGETO && PWINDOWTOCHANGETO->m_workspace->m_id == PLASTWINDOW->m_workspace->m_id)
     {
@@ -703,7 +721,7 @@ SDispatchResult dispatch_movefocustomonitor(std::string arg)
 
     char direction = parse_move_arg(arg);
 
-    const auto target_monitor = g_pCompositor->getMonitorInDirection(direction);
+    const auto target_monitor = g_pCompositor->getMonitorInDirection(direction_char_to_enum(direction));
 
     if (target_monitor)
     {
