@@ -30,6 +30,12 @@ typedef void (*origChangeWorkspace)(CMonitor *, const PHLWORKSPACE &, bool, bool
 void hk_changeWorkspace(CMonitor *thisptr, const PHLWORKSPACE &pWorkspace, bool internal, bool noMouseMove,
                         bool noFocus)
 {
+    if (!pWorkspace || !thisptr->m_activeWorkspace)
+    {
+        (*(origChangeWorkspace)g_pChangeWorkspaceHook->m_original)(thisptr, pWorkspace, internal, noMouseMove, noFocus);
+        return;
+    }
+
     const std::string &current_workspace_name = thisptr->m_activeWorkspace->m_name;
     const std::string &target_workspace_name = pWorkspace->m_name;
 
@@ -78,6 +84,8 @@ void hk_changeWorkspaceID(CMonitor *thisptr, const WORKSPACEID &id, bool interna
             return;
         }
     }
+
+    (*(origChangeWorkspaceID)g_pChangeWorkspaceIDHook->m_original)(thisptr, id, internal, noMouseMove, noFocus);
 }
 
 inline CFunctionHook *g_pStartAnimationHook = nullptr;
