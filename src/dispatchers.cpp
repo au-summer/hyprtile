@@ -10,7 +10,10 @@
 #include <hyprland/src/desktop/view/Window.hpp>
 #include <hyprland/src/helpers/Monitor.hpp>
 #include <hyprland/src/helpers/math/Direction.hpp>
+#include <hyprland/src/helpers/MiscFunctions.hpp>
+#include <hyprland/src/layout/space/Space.hpp>
 #include <hyprland/src/plugins/PluginAPI.hpp>
+#include <hyprland/src/render/Renderer.hpp>
 #include <string>
 
 #include "globals.h"
@@ -424,6 +427,66 @@ SDispatchResult dispatch_movefocus(std::string arg)
     return {};
 }
 
+// modified from moveActiveToWorkspace
+void move_window_to_workspace_with_edge(PHLWINDOW window, const std::string& target_workspace_name, char direction)
+{
+    const auto wsResult = getWorkspaceIDNameFromString("name:" + target_workspace_name);
+    auto pWorkspace = g_pCompositor->getWorkspaceByID(wsResult.id);
+    const auto POLDWS = window->m_workspace;
+
+    if (!pWorkspace) {
+        pWorkspace = g_pCompositor->createNewWorkspace(wsResult.id, window->monitorID(), wsResult.name, false);
+    }
+
+    g_pHyprRenderer->damageWindow(window);
+    g_pCompositor->moveWindowToWorkspaceSafe(window, pWorkspace);
+
+    // reposition tiled windows at the correct edge
+    if (!window->m_isFloating) {
+        auto target = window->layoutTarget();
+        auto space = pWorkspace->m_space;
+        auto workArea = space->workArea();
+
+        Vector2D focalPoint;
+        switch (direction) {
+            case 'r': focalPoint = {workArea.x + 1, workArea.y + workArea.h / 2.0}; break;
+            case 'l': focalPoint = {workArea.x + workArea.w - 1, workArea.y + workArea.h / 2.0}; break;
+            case 'd': focalPoint = {workArea.x + workArea.w / 2.0, workArea.y + 1}; break;
+            case 'u': focalPoint = {workArea.x + workArea.w / 2.0, workArea.y + workArea.h - 1}; break;
+        }
+
+        // remove from layout and add again with focal point at edge
+        space->remove(target);
+        space->move(target, focalPoint);
+
+        // warp to goal instantly to avoid wrong-direction animation
+        window->m_realPosition->setValueAndWarp(window->m_realPosition->goal());
+        window->m_realSize->setValueAndWarp(window->m_realSize->goal());
+    } else {
+        auto mon = pWorkspace->m_monitor.lock();
+        auto pos = window->m_realPosition->goal();
+        auto size = window->m_realSize->goal();
+
+        switch (direction) {
+            case 'r': pos.x = mon->m_position.x; break;
+            case 'l': pos.x = mon->m_position.x + mon->m_size.x - size.x; break;
+            case 'd': pos.y = mon->m_position.y; break;
+            case 'u': pos.y = mon->m_position.y + mon->m_size.y - size.y; break;
+        }
+
+        window->layoutTarget()->setPositionGlobal(CBox{pos, size});
+        window->m_realPosition->setValueAndWarp(pos);
+    }
+
+    POLDWS->m_lastFocusedWindow = POLDWS->getFirstWindow();
+
+    auto pMonitor = pWorkspace->m_monitor.lock();
+    pMonitor->changeWorkspace(pWorkspace);
+
+    Desktop::focusState()->fullWindowFocus(window, Desktop::FOCUS_REASON_KEYBIND);
+    window->warpCursor();
+}
+
 SDispatchResult dispatch_movewindow(std::string arg)
 {
     // arg can be workspace num or direction
@@ -477,9 +540,7 @@ SDispatchResult dispatch_movewindow(std::string arg)
     std::string target_workspace_name = get_workspace_in_direction(direction);
     if (!target_workspace_name.empty())
     {
-        // anim_type = direction;
-        HyprlandAPI::invokeHyprctlCommand("dispatch", "movetoworkspace name:" + target_workspace_name);
-        // anim_type = '\0';
+        move_window_to_workspace_with_edge(PLASTWINDOW, target_workspace_name, direction);
         return {};
     }
 
