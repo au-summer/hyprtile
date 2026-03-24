@@ -604,10 +604,10 @@ SDispatchResult move_to_workspace_impl(std::string arg, bool silent)
     // if (!pWorkspace)
     //     pWorkspace = g_pCompositor->createNewWorkspace(wsResult.id, window ? window->monitorID() : Desktop::focusState()->monitor()->m_id, wsResult.name, false);
 
-    if (window && !window->m_isFloating && get_layout_name(pWorkspace) == "scrolling") {
+    if (window && !window->m_isFloating && pWorkspace && get_layout_name(pWorkspace) == "scrolling") {
         move_window_scrolling(window, pWorkspace);
-        // if (!silent)
-        //     Desktop::focusState()->fullWindowFocus(window, Desktop::FOCUS_REASON_KEYBIND);
+        if (!silent)
+            Desktop::focusState()->fullWindowFocus(window, Desktop::FOCUS_REASON_KEYBIND);
     } else {
         std::string command = silent ? "movetoworkspacesilent name:" : "movetoworkspace name:";
         HyprlandAPI::invokeHyprctlCommand("dispatch", command + workspace_name_to_use);
