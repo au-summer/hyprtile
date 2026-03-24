@@ -596,8 +596,21 @@ SDispatchResult move_to_workspace_impl(std::string arg, bool silent)
         workspace_name_to_use = get_workspace_name(target_column, 0);
     }
 
-    std::string command = silent ? "movetoworkspacesilent name:" : "movetoworkspace name:";
-    HyprlandAPI::invokeHyprctlCommand("dispatch", command + workspace_name_to_use);
+    const auto window = Desktop::focusState()->window();
+    const auto wsResult = getWorkspaceIDNameFromString("name:" + workspace_name_to_use);
+    auto pWorkspace = g_pCompositor->getWorkspaceByID(wsResult.id);
+
+    // if (!pWorkspace)
+    //     pWorkspace = g_pCompositor->createNewWorkspace(wsResult.id, window ? window->monitorID() : Desktop::focusState()->monitor()->m_id, wsResult.name, false);
+
+    if (window && !window->m_isFloating && get_layout_name(pWorkspace) == "scrolling") {
+        move_window_scrolling(window, pWorkspace);
+        // if (!silent)
+        //     Desktop::focusState()->fullWindowFocus(window, Desktop::FOCUS_REASON_KEYBIND);
+    } else {
+        std::string command = silent ? "movetoworkspacesilent name:" : "movetoworkspace name:";
+        HyprlandAPI::invokeHyprctlCommand("dispatch", command + workspace_name_to_use);
+    }
 
     return {};
 }
