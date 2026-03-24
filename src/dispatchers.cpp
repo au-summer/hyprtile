@@ -364,6 +364,12 @@ SDispatchResult dispatch_movefocus(std::string arg)
         }
     }
 
+	// TODO: add a config value to support horizontal movefocus to adjacent workspaces
+	if (direction == 'l' || direction == 'r') {
+		HyprlandAPI::invokeHyprctlCommand("dispatch", "movefocus " + arg);
+		return {};
+	}
+
     const auto PLASTWINDOW = Desktop::focusState()->window();
 
     // If there is a window and a window to move focus to, handle it by hyprland
@@ -389,11 +395,10 @@ SDispatchResult dispatch_movefocus(std::string arg)
     }
 
     // No window in direction
-
-    if (focus_mode && (direction == 'l' || direction == 'r'))
-    {
-        return {.success = false, .error = "Focus mode is enabled"};
-    }
+    // if (focus_mode)
+    // {
+    //     return {.success = false, .error = "Focus mode is enabled"};
+    // }
 
     std::string target_workspace_name = get_workspace_in_direction(direction);
 
@@ -402,7 +407,6 @@ SDispatchResult dispatch_movefocus(std::string arg)
         // Find the window in the workspace in direction
         PHLWINDOW target_window = find_best_window_in_workspace(target_workspace_name, direction);
 
-        // anim_type = direction;
         if (target_window)
         {
             // Due to hide_special_on_workspace_change option, use hyprland's command instead
@@ -413,16 +417,7 @@ SDispatchResult dispatch_movefocus(std::string arg)
         {
             HyprlandAPI::invokeHyprctlCommand("dispatch", "workspace name:" + target_workspace_name);
         }
-
-        // anim_type = '\0';
     }
-
-    // if (!target_workspace_name.empty())
-    // {
-    //     anim_type = direction;
-    //     HyprlandAPI::invokeHyprctlCommand("dispatch", "workspace name:" +
-    //     target_workspace_name); anim_type = '\0'; return {};
-    // }
 
     return {};
 }
@@ -492,6 +487,12 @@ SDispatchResult dispatch_movewindow(std::string arg)
     // arg can be workspace num or direction
     char direction = parse_move_arg(arg);
 
+	// TODO: add a config value to support horizontal movefocus to adjacent workspaces
+	if (direction == 'l' || direction == 'r') {
+		HyprlandAPI::invokeHyprctlCommand("dispatch", "movewindow " + arg);
+		return {};
+	}
+
     const auto PLASTWINDOW = Desktop::focusState()->window();
     if (!PLASTWINDOW)
         return {.success = false, .error = "Window to move not found"};
@@ -532,10 +533,10 @@ SDispatchResult dispatch_movewindow(std::string arg)
         return {};
     }
 
-    if (focus_mode)
-    {
-        return {.success = false, .error = "Focus mode is enabled"};
-    }
+    // if (focus_mode)
+    // {
+    //     return {.success = false, .error = "Focus mode is enabled"};
+    // }
 
     std::string target_workspace_name = get_workspace_in_direction(direction);
     if (!target_workspace_name.empty())
@@ -568,10 +569,8 @@ SDispatchResult move_to_workspace_impl(std::string arg, bool silent)
         workspace_name_to_use = get_workspace_name(target_column, 0);
     }
 
-    // anim_type = workspace_column < current_column ? 'l' : 'r';
     std::string command = silent ? "movetoworkspacesilent name:" : "movetoworkspace name:";
     HyprlandAPI::invokeHyprctlCommand("dispatch", command + workspace_name_to_use);
-    // anim_type = '\0';
 
     return {};
 }
