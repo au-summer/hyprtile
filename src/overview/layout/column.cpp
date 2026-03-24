@@ -422,8 +422,8 @@ CBox HTLayoutColumn::calculate_ws_box(int col_idx, int row_idx, HTViewStage stag
     const int max_rows = get_max_rows();
     const float GAP_SIZE = HTConfig::value<Hyprlang::FLOAT>("gap_size") * monitor->m_scale;
 
-    if (GAP_SIZE > std::min(monitor->m_transformedSize.x, monitor->m_transformedSize.y) || GAP_SIZE < 0)
-        fail_exit("Gap size {} induces invalid render dimensions", GAP_SIZE);
+    // if (GAP_SIZE > std::min(monitor->m_transformedSize.x, monitor->m_transformedSize.y) || GAP_SIZE < 0)
+    //     fail_exit("Gap size {} induces invalid render dimensions", GAP_SIZE);
 
     double render_x = (monitor->m_transformedSize.x - GAP_SIZE * (num_cols + 1)) / num_cols;
     double render_y = (monitor->m_transformedSize.y - GAP_SIZE * (max_rows + 1)) / max_rows;
