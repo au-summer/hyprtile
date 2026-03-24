@@ -567,9 +567,10 @@ SDispatchResult dispatch_movewindow(std::string arg)
 
         if (layout == "dwindle")
             move_window_dwindle(PLASTWINDOW, pWorkspace, direction);
-        else if (layout == "scrolling")
+        else if (layout == "scrolling") {
             move_window_scrolling(PLASTWINDOW, pWorkspace);
-        else {
+            Desktop::focusState()->fullWindowFocus(PLASTWINDOW, Desktop::FOCUS_REASON_KEYBIND);
+        } else {
             HyprlandAPI::invokeHyprctlCommand("dispatch", "movetoworkspace name:" + target_workspace_name);
             return {};
         }
