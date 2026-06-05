@@ -16,8 +16,6 @@
 #include "overview/globals.hpp"
 #include "overview/init.hpp"
 
-#include <iostream>
-
 APICALL EXPORT std::string PLUGIN_API_VERSION()
 {
     return HYPRLAND_API_VERSION;
@@ -73,26 +71,17 @@ void hk_changeWorkspace(CMonitor *thisptr, const PHLWORKSPACE &pWorkspace, bool 
 }
 
 inline CFunctionHook *g_pChangeWorkspaceIDHook = nullptr;
-typedef void (*origChangeWorkspaceID)(CMonitor *, const WORKSPACEID &, bool, bool, bool);
 void hk_changeWorkspaceID(CMonitor *thisptr, const WORKSPACEID &id, bool internal, bool noMouseMove, bool noFocus)
 {
-    for (auto const &workspace : g_pCompositor->getWorkspaces())
-    {
-        if (workspace->m_id == id)
-        {
-            hk_changeWorkspace(thisptr, workspace.lock(), internal, noMouseMove, noFocus);
-            return;
-        }
-    }
-
-    (*(origChangeWorkspaceID)g_pChangeWorkspaceIDHook->m_original)(thisptr, id, internal, noMouseMove, noFocus);
+    hk_changeWorkspace(thisptr, g_pCompositor->getWorkspaceByID(id), internal, noMouseMove, noFocus);
 }
 
 inline CFunctionHook *g_pStartAnimationHook = nullptr;
 typedef void (*origStartAnimation)(CDesktopAnimationManager *, PHLWORKSPACE, CDesktopAnimationManager::eAnimationType,
-                                   bool, bool);
+                                   bool, bool, std::optional<std::string>);
 void hk_startAnimation(CDesktopAnimationManager *thisptr, PHLWORKSPACE ws,
-                       CDesktopAnimationManager::eAnimationType type, bool left, bool instant)
+                       CDesktopAnimationManager::eAnimationType type, bool left, bool instant,
+                       std::optional<std::string> styleArg)
 {
     // Override animation if overview is active to prevent flickering
     if (ht_manager && ht_manager->has_active_view())
@@ -100,33 +89,27 @@ void hk_startAnimation(CDesktopAnimationManager *thisptr, PHLWORKSPACE ws,
         instant = true;
     }
 
-    auto config = ws->m_alpha->getConfig();
-    auto &style = config->pValues->internalStyle;
-    auto original_style = config->pValues->internalStyle;
-
     switch (anim_type)
     {
     case 'l':
         left = false;
-        style = "slide";
+        styleArg = "slide";
         break;
     case 'r':
         left = true;
-        style = "slide";
+        styleArg = "slide";
         break;
     case 'u':
         left = false;
-        style = "slidevert";
+        styleArg = "slidevert";
         break;
     case 'd':
         left = true;
-        style = "slidevert";
+        styleArg = "slidevert";
         break;
     }
 
-    (*(origStartAnimation)g_pStartAnimationHook->m_original)(thisptr, ws, type, left, instant);
-
-    style = original_style;
+    (*(origStartAnimation)g_pStartAnimationHook->m_original)(thisptr, ws, type, left, instant, styleArg);
 }
 
 inline CFunctionHook *g_pFindAvailableDefaultWSHook = nullptr;
@@ -155,6 +138,22 @@ WORKSPACEID hk_findAvailableDefaultWS(CMonitor *thisptr)
     return LONG_MAX;
 }
 
+// fail loudly if the symbol moved
+static CFunctionHook *hook_or_throw(const std::string &name, const std::string &label, void *target)
+{
+    const auto matches = HyprlandAPI::findFunctionsByName(PHANDLE, name);
+
+    if (matches.empty())
+    {
+        HyprlandAPI::addNotification(PHANDLE, "[hyprtile] Failed to resolve symbol: " + label,
+                                     CHyprColor{1.0, 0.2, 0.2, 1.0}, 5000);
+        throw std::runtime_error("[hyprtile] symbol resolution failed: " + label);
+    }
+    CFunctionHook *hook = HyprlandAPI::createFunctionHook(PHANDLE, matches[0].address, target);
+    hook->hook();
+    return hook;
+}
+
 APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle)
 {
     PHANDLE = handle;
@@ -174,29 +173,21 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle)
                                  "\nClient Hash: " + CLIENT_HASH);
     }
 
-    // Function Hooks
-    // static const auto CHANGE_WORKSPACE = HyprlandAPI::findFunctionsByName(PHANDLE, "changeWorkspace");
-    static const auto CHANGE_WORKSPACE_ID =
-        HyprlandAPI::findFunctionsByName(PHANDLE, "_ZN8CMonitor15changeWorkspaceERKlbbb");
-    g_pChangeWorkspaceIDHook =
-        HyprlandAPI::createFunctionHook(PHANDLE, CHANGE_WORKSPACE_ID[0].address, (void *)&hk_changeWorkspaceID);
-    g_pChangeWorkspaceIDHook->hook();
+    // Function hooks
+    g_pChangeWorkspaceIDHook = hook_or_throw("_ZN8CMonitor15changeWorkspaceERKlbbb",
+                                             "CMonitor::changeWorkspace(id)", (void *)&hk_changeWorkspaceID);
 
-    static const auto CHANGE_WORKSPACE = HyprlandAPI::findFunctionsByName(
-        PHANDLE, "_ZN8CMonitor15changeWorkspaceERKN9Hyprutils6Memory14CSharedPointerI10CWorkspaceEEbbb");
     g_pChangeWorkspaceHook =
-        HyprlandAPI::createFunctionHook(PHANDLE, CHANGE_WORKSPACE[0].address, (void *)&hk_changeWorkspace);
-    g_pChangeWorkspaceHook->hook();
+        hook_or_throw("_ZN8CMonitor15changeWorkspaceERKN9Hyprutils6Memory14CSharedPointerI10CWorkspaceEEbbb",
+                      "CMonitor::changeWorkspace(workspace)", (void *)&hk_changeWorkspace);
 
-    static const auto START_ANIMATION = HyprlandAPI::findFunctionsByName(PHANDLE, "startAnimation");
-    g_pStartAnimationHook =
-        HyprlandAPI::createFunctionHook(PHANDLE, START_ANIMATION[0].address, (void *)&hk_startAnimation);
-    g_pStartAnimationHook->hook();
+    g_pStartAnimationHook = hook_or_throw(
+        "_ZN24CDesktopAnimationManager14startAnimationEN9Hyprutils6Memory14CSharedPointerI10CWorkspaceEENS_"
+        "14eAnimationTypeEbbSt8optionalINSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEEE",
+        "CDesktopAnimationManager::startAnimation(workspace)", (void *)&hk_startAnimation);
 
-    static const auto FIND_AVAILABLE_DEFAULT_WS = HyprlandAPI::findFunctionsByName(PHANDLE, "findAvailableDefaultWS");
-    g_pFindAvailableDefaultWSHook = HyprlandAPI::createFunctionHook(PHANDLE, FIND_AVAILABLE_DEFAULT_WS[0].address,
-                                                                    (void *)&hk_findAvailableDefaultWS);
-    g_pFindAvailableDefaultWSHook->hook();
+    g_pFindAvailableDefaultWSHook = hook_or_throw("findAvailableDefaultWS", "CMonitor::findAvailableDefaultWS",
+                                                  (void *)&hk_findAvailableDefaultWS);
 
     // Dispatchers
     dispatchers::addDispatchers();

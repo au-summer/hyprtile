@@ -4,14 +4,12 @@
 
 std::string remove_padding(const std::string &name)
 {
-    // remove zero-width characters
-    std::string result;
-    for (char c : name)
+    // remove zero-width space (U+200B)
+    std::string result = name;
+    size_t pos;
+    while ((pos = result.find("\xE2\x80\x8B")) != std::string::npos)
     {
-        if (c != '\xE2' && c != '\x80' && c != '\x8B') // zero-width space
-        {
-            result += c;
-        }
+        result.erase(pos, 3);
     }
     return result;
 }
@@ -47,6 +45,9 @@ int name_to_column(const std::string &name)
 
 int name_to_index(const std::string &name)
 {
+    if (name.empty())
+        return 0;
+
     char last_char = name.back();
 
     // if the name itself is a number, return 0
@@ -69,10 +70,6 @@ std::string get_workspace_name(int column_id, int index)
     }
     else
     {
-        // return std::to_string(column_id) + static_cast<char>('a' + index - 1);
-        // return std::to_string(column_id) + "." + std::to_string(index);
-        // return std::to_string(column_id) + "\xE2\x80\x8B" + static_cast<char>('a' + index - 1);
-
         return generate_padding(digits) + std::to_string(column_id) + static_cast<char>('a' + index - 1);
     }
 }
