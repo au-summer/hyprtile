@@ -1,7 +1,15 @@
+Hyprland
+hyprtasking
+hyprland-plugins
+hyprtile.so
+prompts/
+
 build/
 .cache/
 .direnv/
 .envrc
+
 compile_commands.json
-reload.sh
+CLAUDE.md
+*CrashReport*.txt
 
