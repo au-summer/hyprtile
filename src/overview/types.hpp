@@ -4,7 +4,6 @@
 #include <hyprland/src/desktop/DesktopTypes.hpp>
 #include <hyprland/src/render/Renderer.hpp>
 #include <hyprutils/math/Box.hpp>
-
 typedef void (*render_workspace_t)(
     void* thisptr,
     PHLMONITOR pMonitor,
@@ -14,16 +13,15 @@ typedef void (*render_workspace_t)(
 );
 
 typedef bool (*should_render_window_t)(void* thisptr, PHLWINDOW pWindow, PHLMONITOR pMonitor);
-
 typedef void (*render_window_t)(
     void* thisptr,
     PHLWINDOW pWindow,
     PHLMONITOR pMonitor,
-    const Time::steady_tp& now,
+    const Time::steady_tp& time,
     bool decorate,
-    eRenderPassMode mode,
+    Render::eRenderPassMode mode,
     bool ignorePosition,
-    bool ignoreAllGeometry
+    bool standalone
 );
 
 typedef long VIEWID;

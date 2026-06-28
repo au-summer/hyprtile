@@ -5,7 +5,6 @@
 #include <string>
 
 extern bool focus_mode;
-extern bool renderingOverview;
 
 namespace dispatchers
 {

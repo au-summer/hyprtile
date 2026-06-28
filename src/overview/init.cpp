@@ -1,7 +1,10 @@
 #include <linux/input-event-codes.h>
 
+#include <cmath>
+
 #include <hyprland/src/Compositor.hpp>
 #include <hyprland/src/SharedDefs.hpp>
+#include <hyprland/src/config/shared/actions/ConfigActions.hpp>
 #include <hyprland/src/desktop/DesktopTypes.hpp>
 #include <hyprland/src/devices/IKeyboard.hpp>
 #include <hyprland/src/helpers/Monitor.hpp>
@@ -13,7 +16,9 @@
 #include <hyprland/src/plugins/HookSystem.hpp>
 #include <hyprland/src/plugins/PluginAPI.hpp>
 #include <hyprland/src/plugins/PluginSystem.hpp>
+#include <hyprland/src/render/OpenGL.hpp>
 #include <hyprland/src/render/Renderer.hpp>
+#include <hyprland/src/config/shared/complex/ComplexDataTypes.hpp>
 #include <hyprland/src/event/EventBus.hpp>
 #include <hyprlang.hpp>
 #include <hyprutils/math/Box.hpp>
@@ -28,6 +33,8 @@
 
 // Store event listeners to prevent them from being destroyed
 static std::vector<std::any> g_eventListeners;
+
+static void register_monitors();
 
 // ========== Overview Dispatchers ==========
 
@@ -78,6 +85,11 @@ static SDispatchResult dispatch_toggle_view(std::string arg)
 {
     if (ht_manager == nullptr)
         return {.success = false, .error = "ht_manager is null"};
+
+    // Monitors that weren't initialized when the plugin loaded (e.g. the built-in panel at
+    // startup) are skipped by register_monitors() and never re-fire monitor.added, leaving them
+    // without a view. Register lazily here so the overview always has a view to show.
+    register_monitors();
 
     if (arg == "all")
     {
@@ -135,7 +147,7 @@ static SDispatchResult dispatch_kill_hover(std::string arg)
     const PHLWINDOW hovered_window = ht_manager->get_window_from_cursor(!cursor_view->active);
     if (hovered_window == nullptr)
         return {.success = false, .error = "hovered_window is null"};
-    g_pCompositor->closeWindow(hovered_window);
+    Config::Actions::closeWindow(hovered_window);
     return {};
 }
 
@@ -149,8 +161,10 @@ static void hook_render_workspace(void *thisptr, PHLMONITOR monitor, PHLWORKSPAC
         ((render_workspace_t)(render_workspace_hook->m_original))(thisptr, monitor, workspace, now, geometry);
         return;
     }
+    // view can legitimately be null (monitor registered after plugin load); fall
+    // through to the original instead of dereferencing when another view is active
     const PHTVIEW view = ht_manager->get_view_from_monitor(monitor);
-    if ((view != nullptr && view->navigating) || ht_manager->has_active_view())
+    if (view != nullptr && (view->navigating || ht_manager->has_active_view()))
     {
         view->layout->render();
     }
@@ -173,14 +187,11 @@ static bool hook_should_render_window(void *thisptr, PHLWINDOW window, PHLMONITO
 
 static uint32_t hook_is_solitary_blocked(void *thisptr, bool full)
 {
-    PHTVIEW view = ht_manager->get_view_from_cursor();
+    // No manager/view for the cursor monitor (e.g. during teardown): defer to Hyprland.
+    // Guarding ht_manager too — dereferencing it here would crash on monitor unplug.
+    PHTVIEW view = ht_manager == nullptr ? nullptr : ht_manager->get_view_from_cursor();
     if (view == nullptr)
-    {
-        Log::logger->log(Log::ERR, "[Hyprtile Overview] View is nullptr in hook_is_solitary_blocked");
-
-        // NOTE: hyprtasking did not return here, a bug
         return (*(origIsSolitaryBlocked)is_solitary_blocked_hook->m_original)(thisptr, full);
-    }
 
     if (view->active || view->navigating)
     {
@@ -290,6 +301,10 @@ static void register_monitors()
         return;
     for (const PHLMONITOR &monitor : g_pCompositor->m_monitors)
     {
+        // Skip monitors that haven't finished initializing
+        if (monitor->m_transformedSize.x < 1 || monitor->m_transformedSize.y < 1)
+            continue;
+
         const PHTVIEW view = ht_manager->get_view_from_monitor(monitor);
         if (view != nullptr)
         {
@@ -307,6 +322,13 @@ static void register_monitors()
             monitor->m_transformedSize.y
         );
     }
+}
+
+static void on_monitor_removed(PHLMONITOR monitor)
+{
+    if (ht_manager == nullptr || monitor == nullptr)
+        return;
+    ht_manager->remove_view_for_monitor_id(monitor->m_id);
 }
 
 static void on_config_reloaded()
@@ -329,6 +351,148 @@ static void on_config_reloaded()
     }
 }
 
+// Fires once per monitor BEFORE Hyprland opens that monitor's main render pass.
+// While the overview is shown, lay out each workspace's windows (recalculateMonitor
+// only touches the active one, so non-active workspaces would keep stale positions and
+// render blank in a scrolling layout); doing it here keeps the mutation off the live pass.
+static void on_render_pre(PHLMONITOR monitor)
+{
+    if (ht_manager == nullptr || monitor == nullptr)
+        return;
+    const PHTVIEW view = ht_manager->get_view_from_monitor(monitor);
+    if (view == nullptr)
+        return;
+    // Mirror hook_render_workspace's guard for when the overview is visible.
+    if (view->navigating || ht_manager->has_active_view())
+        view->layout->prepare_workspaces();
+}
+
+// ========== Anti-culling render hooks ==========
+//
+// The direct scaled render draws each workspace into its tile via a renderModif, which
+// Hyprland applies to texture/border QUADS but NOT to the per-surface scissor (derived
+// from the untransformed window box). The hooks below keep the scissor in sync with the
+// active renderModif during our scaled renders, so contents/borders aren't culled at
+// tile edges, and force the fresh blur path. Ported from hyprtasking main.
+
+typedef void (*render_texture_t)(void *thisptr, SP<Render::ITexture> tex, const CBox &box,
+                                 Render::GL::CHyprOpenGLImpl::STextureRenderData data);
+typedef void (*render_border_t)(void *thisptr, const CBox &box, const Config::CGradientValueData &grad,
+                                Render::GL::CHyprOpenGLImpl::SBorderRenderData data);
+typedef void (*render_border2_t)(void *thisptr, const CBox &box, const Config::CGradientValueData &grad1,
+                                 const Config::CGradientValueData &grad2, float lerp,
+                                 Render::GL::CHyprOpenGLImpl::SBorderRenderData data);
+typedef bool (*blur_optimizations_t)(void *thisptr, PHLLS pLayer, PHLWINDOW pWindow);
+
+// True while a tile / dragged-window is being rendered through an active renderModif.
+static bool render_modif_scaled()
+{
+    auto &render_modif = g_pHyprRenderer->m_renderData.renderModif;
+    return render_modif.enabled && !render_modif.modifs.empty();
+}
+
+// True only while hyprtile is itself driving a scaled render (overview open, or a view
+// animating open/closed on this monitor). Native renderModif paths are left untouched.
+static bool ht_scaled_render()
+{
+    if (ht_manager == nullptr || !render_modif_scaled())
+        return false;
+    if (ht_manager->has_active_view())
+        return true;
+    const auto monitor = g_pHyprRenderer->m_renderData.pMonitor.lock();
+    if (monitor == nullptr)
+        return false;
+    const PHTVIEW view = ht_manager->get_view_from_monitor(monitor);
+    return view != nullptr && view->navigating;
+}
+
+// Drop the per-surface clip regions and scissor to the whole monitor so scaled
+// surfaces are never clipped at their tile edges. Blur path pre-bakes the transform.
+static void hook_render_texture(void *thisptr, SP<Render::ITexture> tex, const CBox &box,
+                                Render::GL::CHyprOpenGLImpl::STextureRenderData data)
+{
+    auto &render_data = g_pHyprRenderer->m_renderData;
+    auto &render_modif = render_data.renderModif;
+
+    if (!ht_scaled_render() || render_data.pMonitor == nullptr)
+    {
+        ((render_texture_t)(render_texture_hook->m_original))(thisptr, tex, box, data);
+        return;
+    }
+
+    CRegion full_damage;
+    full_damage = CBox{0, 0, render_data.pMonitor->m_transformedSize.x, render_data.pMonitor->m_transformedSize.y};
+    data.damage = &full_damage;
+    data.clipRegion = {};
+    const CBox saved_clip_box = render_data.clipBox;
+    render_data.clipBox = CBox{};
+
+    if (data.blur)
+    {
+        // The blur UVs stay untransformed, so pre-bake the transform into the box and
+        // disable the renderModif so the quad and its UVs agree on the tile.
+        CBox tbox = box;
+        render_modif.applyToBox(tbox);
+        const auto saved_modif = render_modif;
+        render_modif.enabled = false;
+        ((render_texture_t)(render_texture_hook->m_original))(thisptr, tex, tbox, data);
+        render_modif = saved_modif;
+    }
+    else
+    {
+        ((render_texture_t)(render_texture_hook->m_original))(thisptr, tex, box, data);
+    }
+
+    render_data.clipBox = saved_clip_box;
+}
+
+// renderBorder scissors with the untransformed box, which swallows the transformed ring.
+// Pre-bake the transform into the box + border size, then disable the renderModif.
+template <typename Fn>
+static void render_border_scaled(CBox &box, Render::GL::CHyprOpenGLImpl::SBorderRenderData &data, Fn &&call_original)
+{
+    auto &render_modif = g_pHyprRenderer->m_renderData.renderModif;
+    if (!ht_scaled_render())
+    {
+        call_original();
+        return;
+    }
+    render_modif.applyToBox(box);
+    data.borderSize = std::round(data.borderSize * render_modif.combinedScale());
+    const auto saved_modif = render_modif;
+    render_modif.enabled = false;
+    call_original();
+    render_modif = saved_modif;
+}
+
+static void hook_render_border(void *thisptr, const CBox &box, const Config::CGradientValueData &grad,
+                               Render::GL::CHyprOpenGLImpl::SBorderRenderData data)
+{
+    CBox tbox = box;
+    render_border_scaled(tbox, data, [&] {
+        ((render_border_t)(render_border_hook->m_original))(thisptr, tbox, grad, data);
+    });
+}
+
+static void hook_render_border2(void *thisptr, const CBox &box, const Config::CGradientValueData &grad1,
+                                const Config::CGradientValueData &grad2, float lerp,
+                                Render::GL::CHyprOpenGLImpl::SBorderRenderData data)
+{
+    CBox tbox = box;
+    render_border_scaled(tbox, data, [&] {
+        ((render_border2_t)(render_border2_hook->m_original))(thisptr, tbox, grad1, grad2, lerp, data);
+    });
+}
+
+// Force the fresh blur path during scaled renders so each window's blur is taken from
+// the current framebuffer (the overview as drawn so far), clipped to its tile.
+static bool hook_blur_optimizations(void *thisptr, PHLLS pLayer, PHLWINDOW pWindow)
+{
+    if (ht_scaled_render())
+        return false;
+    return ((blur_optimizations_t)(blur_optimizations_hook->m_original))(thisptr, pLayer, pWindow);
+}
+
 // ========== Initialization Functions ==========
 
 static void init_functions()
@@ -342,10 +506,52 @@ static void init_functions()
     Log::logger->log(LOG, "[Hyprtile Overview] Attempting hook {}", FNS1[0].signature);
     success = render_workspace_hook->hook();
 
+    // Specific renderTexture overload taking STextureRenderData (several functions share
+    // the "renderTexture" name). Keeps the per-surface scissor in sync with the renderModif.
+    static auto FNS_RT = HyprlandAPI::findFunctionsByName(
+        PHANDLE,
+        "_ZN6Render2GL15CHyprOpenGLImpl13renderTextureEN9Hyprutils6Memory14CSharedPointerINS_8ITextureEEERKNS2_4Math4CBoxENS1_18STextureRenderDataE"
+    );
+    if (FNS_RT.empty())
+        fail_exit("No renderTexture");
+    render_texture_hook = HyprlandAPI::createFunctionHook(PHANDLE, FNS_RT[0].address, (void *)hook_render_texture);
+    Log::logger->log(LOG, "[Hyprtile Overview] Attempting hook {}", FNS_RT[0].signature);
+    success = render_texture_hook->hook() && success;
+
+    static auto FNS_RB = HyprlandAPI::findFunctionsByName(
+        PHANDLE,
+        "_ZN6Render2GL15CHyprOpenGLImpl12renderBorderERKN9Hyprutils4Math4CBoxERKN6Config18CGradientValueDataENS1_17SBorderRenderDataE"
+    );
+    if (FNS_RB.empty())
+        fail_exit("No renderBorder");
+    render_border_hook = HyprlandAPI::createFunctionHook(PHANDLE, FNS_RB[0].address, (void *)hook_render_border);
+    Log::logger->log(LOG, "[Hyprtile Overview] Attempting hook {}", FNS_RB[0].signature);
+    success = render_border_hook->hook() && success;
+
+    static auto FNS_RB2 = HyprlandAPI::findFunctionsByName(
+        PHANDLE,
+        "_ZN6Render2GL15CHyprOpenGLImpl12renderBorderERKN9Hyprutils4Math4CBoxERKN6Config18CGradientValueDataESA_fNS1_17SBorderRenderDataE"
+    );
+    if (FNS_RB2.empty())
+        fail_exit("No renderBorder (lerp)");
+    render_border2_hook = HyprlandAPI::createFunctionHook(PHANDLE, FNS_RB2[0].address, (void *)hook_render_border2);
+    Log::logger->log(LOG, "[Hyprtile Overview] Attempting hook {}", FNS_RB2[0].signature);
+    success = render_border2_hook->hook() && success;
+
+    static auto FNS_BO = HyprlandAPI::findFunctionsByName(
+        PHANDLE,
+        "_ZN6Render13IHyprRenderer29shouldUseNewBlurOptimizationsEN9Hyprutils6Memory14CSharedPointerIN7Desktop4View13CLayerSurfaceEEENS3_INS5_7CWindowEEE"
+    );
+    if (FNS_BO.empty())
+        fail_exit("No shouldUseNewBlurOptimizations");
+    blur_optimizations_hook =
+        HyprlandAPI::createFunctionHook(PHANDLE, FNS_BO[0].address, (void *)hook_blur_optimizations);
+    Log::logger->log(LOG, "[Hyprtile Overview] Attempting hook {}", FNS_BO[0].signature);
+    success = blur_optimizations_hook->hook() && success;
+
     static auto FNS2 = HyprlandAPI::findFunctionsByName(
         PHANDLE,
-        "_ZN13CHyprRenderer18shouldRenderWindowEN9Hyprutils6Memory14CS"
-        "haredPointerIN7Desktop4View7CWindowEEENS2_I8CMonitorEE"
+        "_ZN6Render13IHyprRenderer18shouldRenderWindowEN9Hyprutils6Memory14CSharedPointerIN7Desktop4View7CWindowEEENS3_I8CMonitorEE"
     );
     if (FNS2.empty())
         fail_exit("No shouldRenderWindow");
@@ -356,10 +562,7 @@ static void init_functions()
 
     static auto FNS3 = HyprlandAPI::findFunctionsByName(
         PHANDLE,
-        "_ZN13CHyprRenderer12renderWindowEN9Hyprutils6Memory14CSha"
-        "redPointerIN7Desktop4View7CWindowEEENS2_I8CMonitorEERKNSt"
-        "6chrono10time_pointINS9_3_V212steady_clockENS9_8durationI"
-        "lSt5ratioILl1ELl1000000000EEEEEEb15eRenderPassModebb"
+        "_ZN6Render13IHyprRenderer12renderWindowEN9Hyprutils6Memory14CSharedPointerIN7Desktop4View7CWindowEEENS3_I8CMonitorEERKNSt6chrono10time_pointINSA_3_V212steady_clockENSA_8durationIlSt5ratioILl1ELl1000000000EEEEEEbNS_15eRenderPassModeEbb"
     );
     if (FNS3.empty())
         fail_exit("No renderWindow");
@@ -398,6 +601,8 @@ static void register_callbacks()
 
         bus.config.reloaded.listen(on_config_reloaded),
         bus.monitor.added.listen([](PHLMONITOR m) { register_monitors(); }),
+        bus.monitor.removed.listen(on_monitor_removed),
+        bus.render.pre.listen(on_render_pre),
 
         bus.input.keyboard.key.listen(on_key_press),
     };
@@ -487,7 +692,11 @@ void exit()
     Log::logger->log(LOG, "[Hyprtile Overview] Cleaning up overview module...");
 
     if (ht_manager)
+    {
+        // prevent crashes on unload (upstream 74a1319)
+        ht_manager->hide_all_views();
         ht_manager->reset();
+    }
 
     Log::logger->log(LOG, "[Hyprtile Overview] Overview module cleaned up");
 }

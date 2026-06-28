@@ -1,3 +1,18 @@
+// Pre-include the std headers used in FocusState.hpp
+#include <any>
+#include <chrono>
+#include <functional>
+#include <memory>
+#include <optional>
+#include <string>
+#include <unordered_map>
+#include <vector>
+
+// To access CFocusState::m_focusWindow
+#define private public
+#include <hyprland/src/desktop/state/FocusState.hpp>
+#undef private
+
 #include "dispatchers.h"
 
 #include <climits>
@@ -8,9 +23,9 @@
 #include <hyprland/src/desktop/history/WindowHistoryTracker.hpp>
 #include <hyprland/src/desktop/state/FocusState.hpp>
 #include <hyprland/src/desktop/view/Window.hpp>
+#include <hyprland/src/helpers/MiscFunctions.hpp>
 #include <hyprland/src/helpers/Monitor.hpp>
 #include <hyprland/src/helpers/math/Direction.hpp>
-#include <hyprland/src/helpers/MiscFunctions.hpp>
 #include <hyprland/src/layout/algorithm/Algorithm.hpp>
 #include <hyprland/src/layout/algorithm/TiledAlgorithm.hpp>
 #include <hyprland/src/layout/space/Space.hpp>
@@ -45,24 +60,31 @@ char parse_move_arg(const std::string &arg)
 
 Math::eDirection direction_char_to_enum(char direction)
 {
-	switch (direction)
-	{
-	case 'l':
-		return Math::eDirection::DIRECTION_LEFT;
-	case 'r':
-		return Math::eDirection::DIRECTION_RIGHT;
-	case 'u':
-		return Math::eDirection::DIRECTION_UP;
-	case 'd':
-		return Math::eDirection::DIRECTION_DOWN;
-	default:
-		return Math::eDirection::DIRECTION_DEFAULT;
-	}
+    switch (direction)
+    {
+    case 'l':
+        return Math::eDirection::DIRECTION_LEFT;
+    case 'r':
+        return Math::eDirection::DIRECTION_RIGHT;
+    case 'u':
+        return Math::eDirection::DIRECTION_UP;
+    case 'd':
+        return Math::eDirection::DIRECTION_DOWN;
+    default:
+        return Math::eDirection::DIRECTION_DEFAULT;
+    }
 }
 
 bool is_window_on_current_monitor(const PHLWINDOW &window)
 {
-    return window->m_monitor->m_id == Desktop::focusState()->monitor()->m_id;
+    const auto mon = Desktop::focusState()->monitor();
+    return mon && window->m_monitor && window->m_monitor->m_id == mon->m_id;
+}
+
+PHLWORKSPACE active_workspace()
+{
+    const auto mon = Desktop::focusState()->monitor();
+    return mon ? mon->m_activeWorkspace : nullptr;
 }
 
 // check if we should use Hyprland's focus logic
@@ -116,7 +138,7 @@ PHLWINDOW find_best_window_in_workspace(const std::string &target_workspace_name
     for (auto it = history.rbegin(); it != history.rend(); ++it)
     {
         const auto window = it->lock();
-        if (!window || !window->m_isMapped)
+        if (!window || !window->m_isMapped || !window->m_workspace)
             continue;
 
         const std::string &window_workspace_name = window->m_workspace->m_name;
@@ -155,7 +177,7 @@ std::string find_workspace_by_column(int target_column)
     for (auto it = history.rbegin(); it != history.rend(); ++it)
     {
         const auto window = it->lock();
-        if (!window || !window->m_isMapped)
+        if (!window || !window->m_isMapped || !window->m_workspace)
             continue;
 
         const auto &workspace = window->m_workspace;
@@ -182,7 +204,7 @@ std::string find_previous_workspace(int current_column)
     for (auto it = history.rbegin(); it != history.rend(); ++it)
     {
         const auto window = it->lock();
-        if (!window || !window->m_isMapped)
+        if (!window || !window->m_isMapped || !window->m_workspace)
             continue;
 
         // TODO: is this really necessary?
@@ -214,7 +236,10 @@ SDispatchResult dispatch_workspace(std::string arg)
         return {.success = false, .error = "Focus mode is enabled"};
     }
 
-    const std::string &current_workspace_name = Desktop::focusState()->monitor()->m_activeWorkspace->m_name;
+    const auto current_ws = active_workspace();
+    if (!current_ws)
+        return {.success = false, .error = "No active workspace"};
+    const std::string &current_workspace_name = current_ws->m_name;
     int current_column = name_to_column(current_workspace_name);
 
     if (arg == "previous")
@@ -222,25 +247,11 @@ SDispatchResult dispatch_workspace(std::string arg)
         std::string previous_workspace_name = find_previous_workspace(current_column);
         if (!previous_workspace_name.empty())
         {
-            // anim_type = workspace_column < current_column ? 'l' : 'r';
             HyprlandAPI::invokeHyprctlCommand("dispatch", "workspace name:" + previous_workspace_name);
-            // anim_type = '\0';
         }
         return {};
     }
-    // TODO: support l/r/u/d
-    else if (arg == "l")
-    {
-    }
-    else if (arg == "r")
-    {
-    }
-    else if (arg == "u")
-    {
-    }
-    else if (arg == "d")
-    {
-    }
+    // TODO: support l/r/u/d directional workspace switch
 
     int target_column;
     try
@@ -260,9 +271,7 @@ SDispatchResult dispatch_workspace(std::string arg)
         workspace_name = get_workspace_name(target_column, 0);
     }
 
-    // anim_type = target_column < current_column ? 'l' : 'r';
     HyprlandAPI::invokeHyprctlCommand("dispatch", "workspace name:" + workspace_name);
-    // anim_type = '\0';
     return {};
 }
 
@@ -275,7 +284,7 @@ std::string find_horizontal_workspace(int current_column, bool search_left)
     for (auto it = history.rbegin(); it != history.rend(); ++it)
     {
         const auto window = it->lock();
-        if (!window || !window->m_isMapped)
+        if (!window || !window->m_isMapped || !window->m_workspace)
             continue;
 
         if (!is_window_on_current_monitor(window))
@@ -307,9 +316,14 @@ std::string find_horizontal_workspace(int current_column, bool search_left)
 std::string get_workspace_in_direction(char direction)
 {
     // NOTE: Only consider workspaces on the same monitor
-    const std::string &current_workspace_name = Desktop::focusState()->monitor()->m_activeWorkspace->m_name;
+    const auto current_ws = active_workspace();
+    if (!current_ws)
+        return "";
+    const std::string &current_workspace_name = current_ws->m_name;
     int current_column = name_to_column(current_workspace_name);
     int current_index = name_to_index(current_workspace_name);
+    if (current_column == -1)
+        return "";
 
     switch (direction)
     {
@@ -367,18 +381,28 @@ SDispatchResult dispatch_movefocus(std::string arg)
         }
     }
 
-	// TODO: add a config value to support horizontal movefocus to adjacent workspaces
-	if (direction == 'l' || direction == 'r') {
-		HyprlandAPI::invokeHyprctlCommand("dispatch", "movefocus " + arg);
-		return {};
-	}
+    // TODO: add a config value to support horizontal movefocus to adjacent workspaces
+    // if (direction == 'l' || direction == 'r') {
+    // 	HyprlandAPI::invokeHyprctlCommand("dispatch", "movefocus " + arg);
+    // 	return {};
+    // }
 
     const auto PLASTWINDOW = Desktop::focusState()->window();
 
     // If there is a window and a window to move focus to, handle it by hyprland
     if (PLASTWINDOW)
     {
-        const auto PWINDOWTOCHANGETO = g_pCompositor->getWindowInDirection(PLASTWINDOW, direction_char_to_enum(direction));
+        // const auto PWINDOWTOCHANGETO = g_pCompositor->getWindowInDirection(PLASTWINDOW,
+        // direction_char_to_enum(direction));
+
+        // KeybindManager.c:moveFocusTo
+        static auto PFULLCYCLE = CConfigValue<Hyprlang::INT>("binds:movefocus_cycles_fullscreen");
+        auto dir = direction_char_to_enum(direction);
+        const auto PWINDOWTOCHANGETO =
+            *PFULLCYCLE && PLASTWINDOW->isFullscreen()
+                ? g_pCompositor->getWindowCycle(PLASTWINDOW, true, {}, false,
+                                                dir != Math::DIRECTION_DOWN && dir != Math::DIRECTION_RIGHT, true)
+                : g_pCompositor->getWindowInDirection(PLASTWINDOW, dir);
 
         // Found window in direction and on same workspace, switch to it
         if (PWINDOWTOCHANGETO && PWINDOWTOCHANGETO->m_workspace->m_id == PLASTWINDOW->m_workspace->m_id)
@@ -398,6 +422,10 @@ SDispatchResult dispatch_movefocus(std::string arg)
     }
 
     // No window in direction
+    if (direction == 'l' || direction == 'r')
+    {
+        return {};
+    }
     // if (focus_mode)
     // {
     //     return {.success = false, .error = "Focus mode is enabled"};
@@ -425,11 +453,18 @@ SDispatchResult dispatch_movefocus(std::string arg)
     return {};
 }
 
-std::string get_layout_name(PHLWORKSPACE ws) {
+std::string get_layout_name(PHLWORKSPACE ws)
+{
     if (!ws->m_space || !ws->m_space->algorithm() || !ws->m_space->algorithm()->tiledAlgo())
         return "";
     const auto tiledAlgo = ws->m_space->algorithm()->tiledAlgo().get();
     return Layout::Supplementary::algoMatcher()->getNameForTiledAlgo(&typeid(*tiledAlgo));
+}
+
+// "movetoworkspace name:" / "movetoworkspacesilent name:" dispatcher command prefix
+std::string move_to_ws_command(bool silent)
+{
+    return silent ? "movetoworkspacesilent name:" : "movetoworkspace name:";
 }
 
 // dwindle: move then remove+re-add with focal point at the target edge
@@ -442,11 +477,20 @@ void move_window_dwindle(PHLWINDOW window, PHLWORKSPACE pWorkspace, char directi
     auto workArea = space->workArea();
 
     Vector2D focalPoint;
-    switch (direction) {
-        case 'r': focalPoint = {workArea.x + 1, workArea.y + workArea.h / 2.0}; break;
-        case 'l': focalPoint = {workArea.x + workArea.w - 1, workArea.y + workArea.h / 2.0}; break;
-        case 'd': focalPoint = {workArea.x + workArea.w / 2.0, workArea.y + 1}; break;
-        case 'u': focalPoint = {workArea.x + workArea.w / 2.0, workArea.y + workArea.h - 1}; break;
+    switch (direction)
+    {
+    case 'r':
+        focalPoint = {workArea.x + 1, workArea.y + workArea.h / 2.0};
+        break;
+    case 'l':
+        focalPoint = {workArea.x + workArea.w - 1, workArea.y + workArea.h / 2.0};
+        break;
+    case 'd':
+        focalPoint = {workArea.x + workArea.w / 2.0, workArea.y + 1};
+        break;
+    case 'u':
+        focalPoint = {workArea.x + workArea.w / 2.0, workArea.y + workArea.h - 1};
+        break;
     }
 
     space->remove(target);
@@ -456,25 +500,46 @@ void move_window_dwindle(PHLWINDOW window, PHLWORKSPACE pWorkspace, char directi
     window->m_realSize->setValueAndWarp(window->m_realSize->goal());
 }
 
-// scrolling: move window then reposition next to last focused column
-void move_window_scrolling(PHLWINDOW window, PHLWORKSPACE pWorkspace)
+// Reposition `window` (already on pWorkspace, scrolling layout) to the right of `reference`
+// WITHOUT switching the visible workspace. The scrolling algorithm inserts a moved target
+// relative to the focused window (CScrollingAlgorithm::newTarget reads focusState()->window()),
+// so we point the focus field at `reference` directly -- a real focus change (rawWindowFocus)
+// on a non-visible workspace would call changeWorkspace and pull the view over -- then restore
+// it. The dance never changes the seat/keyboard focus, only the field newTarget reads.
+void scrolling_place_right_of(PHLWINDOW window, PHLWORKSPACE pWorkspace, PHLWINDOW reference)
 {
-    auto lastFocused = pWorkspace->m_lastFocusedWindow.lock();
+    // No reference (empty target) or the window itself (degenerate same-workspace move): a no-op.
+    // Placing relative to the window itself would hit CScrollingAlgorithm::newTarget's mouse-coord
+    // fallback and re-order by cursor position.
+    if (!reference || reference == window)
+        return;
 
-    g_pCompositor->moveWindowToWorkspaceSafe(window, pWorkspace);
+    const auto saved = Desktop::focusState()->m_focusWindow;
+    Desktop::focusState()->m_focusWindow = reference;
 
-	// move window from rightmost to the right of last focused window
-    if (lastFocused) {
-        Desktop::focusState()->fullWindowFocus(lastFocused, Desktop::FOCUS_REASON_KEYBIND);
+    auto target = window->layoutTarget();
+    auto space = pWorkspace->m_space;
+    space->remove(target);
+    space->move(target, {});
 
-        auto target = window->layoutTarget();
-        auto space = pWorkspace->m_space;
-        space->remove(target);
-        space->move(target, {});
-    }
+    Desktop::focusState()->m_focusWindow = saved;
 
     window->m_realPosition->setValueAndWarp(window->m_realPosition->goal());
     window->m_realSize->setValueAndWarp(window->m_realSize->goal());
+}
+
+// Move `window` to scrolling-layout `pWorkspace` (named `wsName`) via the native dispatcher, then
+// place it to the right of the target's last-focused window. The native dispatcher handles the
+// move and focus -- follow the window when not silent, stay on the current workspace when silent
+// -- and the scrolling layout otherwise appends the moved-in window at the end, so
+// scrolling_place_right_of nudges it next to the last-focused window without disturbing the view.
+// Capture lastFocused before the move (it can change as a side effect of the move).
+void move_window_scrolling(PHLWINDOW window, PHLWORKSPACE pWorkspace, const std::string &wsName, bool silent)
+{
+    const auto lastFocused = pWorkspace->m_lastFocusedWindow.lock();
+    HyprlandAPI::invokeHyprctlCommand("dispatch", move_to_ws_command(silent) + wsName);
+    if (window->m_workspace == pWorkspace)
+        scrolling_place_right_of(window, pWorkspace, lastFocused);
 }
 
 SDispatchResult dispatch_movewindow(std::string arg)
@@ -482,11 +547,12 @@ SDispatchResult dispatch_movewindow(std::string arg)
     // arg can be workspace num or direction
     char direction = parse_move_arg(arg);
 
-	// TODO: add a config value to support horizontal movewindow to adjacent workspaces
-	if (direction == 'l' || direction == 'r') {
-		HyprlandAPI::invokeHyprctlCommand("dispatch", "movewindow " + arg);
-		return {};
-	}
+    // TODO: add a config value to support horizontal movewindow to adjacent workspaces
+    if (direction == 'l' || direction == 'r')
+    {
+        HyprlandAPI::invokeHyprctlCommand("dispatch", "movewindow " + arg);
+        return {};
+    }
 
     const auto PLASTWINDOW = Desktop::focusState()->window();
     if (!PLASTWINDOW)
@@ -506,7 +572,13 @@ SDispatchResult dispatch_movewindow(std::string arg)
         // const auto &sizeX = size->goal().x;
         // const auto &sizeY = size->goal().y;
 
-        const auto &mon_size = PLASTWINDOW->m_monitor->m_size;
+        const auto mon = PLASTWINDOW->m_monitor.lock();
+        if (!mon)
+        {
+            HyprlandAPI::invokeHyprctlCommand("dispatch", "movewindow " + arg);
+            return {};
+        }
+        const auto &mon_size = mon->m_size;
 
         // if (!((posX <= 0 && direction == 'l') || (posX + sizeX >= mon_size.x && direction == 'r') ||
         //       (posY <= 0 && direction == 'u') || (posY + sizeY >= mon_size.y && direction == 'd')))
@@ -539,37 +611,56 @@ SDispatchResult dispatch_movewindow(std::string arg)
 
     const auto wsResult = getWorkspaceIDNameFromString("name:" + target_workspace_name);
     auto pWorkspace = g_pCompositor->getWorkspaceByID(wsResult.id);
-    const auto POLDWS = PLASTWINDOW->m_workspace;
-
-    if (!pWorkspace)
-        pWorkspace = g_pCompositor->createNewWorkspace(wsResult.id, PLASTWINDOW->monitorID(), wsResult.name, false);
 
     g_pHyprRenderer->damageWindow(PLASTWINDOW);
 
-    if (PLASTWINDOW->m_isFloating) {
+    if (PLASTWINDOW->m_isFloating)
+    {
+        // Floating placement is absolute (snapped to the target monitor's edge), so it needs the
+        // workspace to exist even when empty -- create it if missing.
+        if (!pWorkspace)
+            pWorkspace = g_pCompositor->createNewWorkspace(wsResult.id, PLASTWINDOW->monitorID(), wsResult.name, false);
+
         g_pCompositor->moveWindowToWorkspaceSafe(PLASTWINDOW, pWorkspace);
 
         auto mon = pWorkspace->m_monitor.lock();
+        if (!mon)
+            return {};
         auto pos = PLASTWINDOW->m_realPosition->goal();
         auto size = PLASTWINDOW->m_realSize->goal();
 
-        switch (direction) {
-            case 'r': pos.x = mon->m_position.x; break;
-            case 'l': pos.x = mon->m_position.x + mon->m_size.x - size.x; break;
-            case 'd': pos.y = mon->m_position.y; break;
-            case 'u': pos.y = mon->m_position.y + mon->m_size.y - size.y; break;
+        switch (direction)
+        {
+        case 'r':
+            pos.x = mon->m_position.x;
+            break;
+        case 'l':
+            pos.x = mon->m_position.x + mon->m_size.x - size.x;
+            break;
+        case 'd':
+            pos.y = mon->m_position.y;
+            break;
+        case 'u':
+            pos.y = mon->m_position.y + mon->m_size.y - size.y;
+            break;
         }
 
         PLASTWINDOW->layoutTarget()->setPositionGlobal(CBox{pos, size});
         PLASTWINDOW->m_realPosition->setValueAndWarp(pos);
-    } else {
-        std::string layout = get_layout_name(pWorkspace);
+    }
+    else
+    {
+        // Custom tiled placement only matters relative to existing windows. If the target column
+        // has no workspace yet it is empty (layout ""), so we fall through to the native dispatcher
+        // below, which creates it and lands the sole window identically.
+        const std::string layout = pWorkspace ? get_layout_name(pWorkspace) : "";
 
         if (layout == "dwindle")
             move_window_dwindle(PLASTWINDOW, pWorkspace, direction);
         else if (layout == "scrolling")
-            move_window_scrolling(PLASTWINDOW, pWorkspace);
-        else {
+            move_window_scrolling(PLASTWINDOW, pWorkspace, target_workspace_name, false);
+        else
+        {
             HyprlandAPI::invokeHyprctlCommand("dispatch", "movetoworkspace name:" + target_workspace_name);
             return {};
         }
@@ -587,6 +678,8 @@ SDispatchResult move_to_workspace_impl(std::string arg, bool silent)
     }
 
     int target_column = name_to_column(arg);
+    if (target_column == -1)
+        return {.success = false, .error = "Invalid workspace target"};
 
     std::string workspace_name_to_use = find_workspace_by_column(target_column);
 
@@ -600,16 +693,17 @@ SDispatchResult move_to_workspace_impl(std::string arg, bool silent)
     const auto wsResult = getWorkspaceIDNameFromString("name:" + workspace_name_to_use);
     auto pWorkspace = g_pCompositor->getWorkspaceByID(wsResult.id);
 
-    // if (!pWorkspace)
-    //     pWorkspace = g_pCompositor->createNewWorkspace(wsResult.id, window ? window->monitorID() : Desktop::focusState()->monitor()->m_id, wsResult.name, false);
-
-    if (window && !window->m_isFloating && get_layout_name(pWorkspace) == "scrolling") {
-        move_window_scrolling(window, pWorkspace);
-        // if (!silent)
-        //     Desktop::focusState()->fullWindowFocus(window, Desktop::FOCUS_REASON_KEYBIND);
-    } else {
-        std::string command = silent ? "movetoworkspacesilent name:" : "movetoworkspace name:";
-        HyprlandAPI::invokeHyprctlCommand("dispatch", command + workspace_name_to_use);
+    // pWorkspace is null when the target column has no workspace yet. We deliberately don't create
+    // it: the custom scrolling placement only matters relative to existing windows, so for an empty
+    // target the `pWorkspace` guard below falls through to the native dispatcher, which creates the
+    // workspace and lands the sole window identically.
+    if (window && !window->m_isFloating && pWorkspace && get_layout_name(pWorkspace) == "scrolling")
+    {
+        move_window_scrolling(window, pWorkspace, workspace_name_to_use, silent);
+    }
+    else
+    {
+        HyprlandAPI::invokeHyprctlCommand("dispatch", move_to_ws_command(silent) + workspace_name_to_use);
     }
 
     return {};
@@ -629,7 +723,10 @@ SDispatchResult dispatch_cleancurrentcolumn(std::string arg)
 {
     // check all the workspaces on this column
     // if there is empty ones, shrink others
-    const std::string &current_workspace_name = Desktop::focusState()->monitor()->m_activeWorkspace->m_name;
+    const auto current_ws = active_workspace();
+    if (!current_ws)
+        return {.success = false, .error = "No active workspace"};
+    const std::string &current_workspace_name = current_ws->m_name;
     int current_column = name_to_column(current_workspace_name);
 
     // pair of (name, id)
@@ -674,7 +771,10 @@ SDispatchResult dispatch_cleancurrentcolumn(std::string arg)
 
 SDispatchResult dispatch_insertworkspace(std::string arg)
 {
-    const std::string &current_workspace_name = Desktop::focusState()->monitor()->m_activeWorkspace->m_name;
+    const auto current_ws = active_workspace();
+    if (!current_ws)
+        return {.success = false, .error = "No active workspace"};
+    const std::string &current_workspace_name = current_ws->m_name;
     int current_column = name_to_column(current_workspace_name);
     int current_index = name_to_index(current_workspace_name);
 
@@ -707,9 +807,7 @@ SDispatchResult dispatch_insertworkspace(std::string arg)
 
     // switch to the new workspace
     std::string new_workspace_name = get_workspace_name(current_column, current_index);
-    // anim_type = 'f';
     HyprlandAPI::invokeHyprctlCommand("dispatch", "workspace name:" + new_workspace_name);
-    // anim_type = '\0';
 
     return {};
 }
@@ -733,10 +831,13 @@ SDispatchResult dispatch_moveworkspace(std::string arg)
         return {.success = false, .error = "Invalid direction for moveworkspace"};
     }
 
-    auto current_workspace_id = Desktop::focusState()->monitor()->m_activeWorkspace->m_id;
+    const auto current_ws = active_workspace();
+    if (!current_ws)
+        return {.success = false, .error = "No active workspace"};
+    auto current_workspace_id = current_ws->m_id;
 
     // not a reference because it can be modified later
-    const std::string current_workspace_name = Desktop::focusState()->monitor()->m_activeWorkspace->m_name;
+    const std::string current_workspace_name = current_ws->m_name;
     int current_column = name_to_column(current_workspace_name);
     int current_index = name_to_index(current_workspace_name);
 
@@ -754,7 +855,6 @@ SDispatchResult dispatch_moveworkspace(std::string arg)
             std::string target_workspace_name = workspace->m_name;
 
             // for animation puspose, first switch to that workspace
-            // anim_type = direction;
             HyprlandAPI::invokeHyprctlCommand("dispatch", "workspace name:" + target_workspace_name);
 
             // swap the name
@@ -767,7 +867,6 @@ SDispatchResult dispatch_moveworkspace(std::string arg)
             // switch back to the current workspace
             // which is now renamed to target_workspace_name!
             HyprlandAPI::invokeHyprctlCommand("dispatch", "workspace name:" + target_workspace_name);
-            // anim_type = '\0';
 
             return {};
         }
@@ -778,7 +877,10 @@ SDispatchResult dispatch_moveworkspace(std::string arg)
 
 SDispatchResult dispatch_movecurrentcolumntomonitor(std::string arg)
 {
-    const auto &current_workspace_name = Desktop::focusState()->monitor()->m_activeWorkspace->m_name;
+    const auto current_ws = active_workspace();
+    if (!current_ws)
+        return {.success = false, .error = "No active workspace"};
+    const std::string &current_workspace_name = current_ws->m_name;
     const auto current_column = name_to_column(current_workspace_name);
 
     // Here we move other workspaces in the column first, then the current one
@@ -786,10 +888,6 @@ SDispatchResult dispatch_movecurrentcolumntomonitor(std::string arg)
     // target monitor
     for (const auto &workspace : g_pCompositor->getWorkspaces())
     {
-        // do not consider special workspaces
-        if (workspace->m_name.starts_with("special"))
-            continue;
-
         const auto workspace_column = name_to_column(workspace->m_name);
 
         // skip special workspaces

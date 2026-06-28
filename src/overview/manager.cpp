@@ -1,7 +1,10 @@
 #include "manager.hpp"
 
+#include <algorithm>
+#include <unordered_set>
+#include <vector>
+
 #include <hyprland/src/Compositor.hpp>
-#include <hyprland/src/config/ConfigManager.hpp>
 #include <hyprland/src/desktop/DesktopTypes.hpp>
 #include <hyprland/src/managers/KeybindManager.hpp>
 #include <hyprland/src/managers/input/InputManager.hpp>
@@ -110,6 +113,12 @@ void HTManager::reset() {
     swipe_state = HT_SWIPE_NONE;
     swipe_amt = 0.0;
     views.clear();
+}
+
+void HTManager::remove_view_for_monitor_id(MONITORID mid) {
+    std::erase_if(views, [mid](const PHTVIEW& v) {
+        return v == nullptr || v->monitor_id == mid;
+    });
 }
 
 bool HTManager::has_active_view() {

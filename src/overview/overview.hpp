@@ -31,7 +31,7 @@ class HTView {
 
     PHLMONITOR get_monitor();
 
-    void show();
+    void show(bool recalculate = true);
     void hide(bool exit_on_mouse);
 
     void move_id(WORKSPACEID ws_id, bool move_window);
@@ -39,11 +39,12 @@ class HTView {
     void move(std::string arg, bool move_window);
 
   private:
-    // Hold references to workspaces during overview to prevent them from being destroyed
+    // Hold references to workspaces shown in the overview so Hyprland's
+    // reference counting doesn't destroy empty ones while it is open.
     std::vector<PHLWORKSPACE> preserved_workspaces;
 
-    void preserve_workspaces();  // Mark workspaces as persistent when overview opens
-    void release_workspaces();   // Release persistence when overview closes
+    void preserve_workspaces(); // hold references when the overview opens
+    void release_workspaces();  // release them when it closes
 };
 
 typedef SP<HTView> PHTVIEW;

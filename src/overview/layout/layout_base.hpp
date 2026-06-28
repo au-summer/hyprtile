@@ -18,12 +18,11 @@ class HTLayoutBase {
   protected:
     // Same as monitor_id of the parent view
     VIEWID view_id;
-    WORKSPACEID focus_from = WORKSPACE_INVALID;
-    WORKSPACEID focus_to = WORKSPACE_INVALID;
-    bool focus_inited = false;
-    PHLANIMVAR<float> focus_progress;
+    // Per-tile focus emphasis, each animated independently and always retargeted
+    // from its live value (never warped) so rapid focus changes stay continuous.
+    std::unordered_map<WORKSPACEID, PHLANIMVAR<float>> focus_scales;
 
-    void update_focus_state(HTViewStage stage);
+    void update_focus_state();
     float focus_scale_for_id(WORKSPACEID workspace_id, HTViewStage stage);
     CBox apply_focus_scale(const CBox& box, WORKSPACEID workspace_id, HTViewStage stage);
 
@@ -33,8 +32,11 @@ class HTLayoutBase {
     HTLayoutBase(VIEWID new_view_id);
     virtual ~HTLayoutBase() = default;
 
+    VIEWID get_view_id() const { return view_id; }
+
     virtual std::string layout_name() = 0;
 
+    int layer = 0;
     struct HTWorkspace {
         int x;
         int y;
@@ -71,6 +73,13 @@ class HTLayoutBase {
     virtual void init_position();
     // Populate overview_layout as if the overview was at a given stage
     virtual void build_overview_layout(HTViewStage stage);
+
+    // Called from the render.pre hook, BEFORE Hyprland opens the monitor's main
+    // pass: lay out each shown workspace's windows (a real changeWorkspace recalcs
+    // only the active one, so non-active workspaces keep stale positions). Keeps the
+    // layout mutation out of the live render pass.
+    virtual void prepare_workspaces() {}
+
     // Render the overview
     virtual void render();
 

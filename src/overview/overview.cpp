@@ -4,21 +4,18 @@
 #include <hyprland/src/SharedDefs.hpp>
 #include <hyprland/src/desktop/DesktopTypes.hpp>
 #include <hyprland/src/macros.hpp>
-#include <hyprland/src/managers/cursor/CursorShapeOverrideController.hpp>
 #include <hyprland/src/managers/input/InputManager.hpp>
+#include <hyprland/src/managers/cursor/CursorShapeOverrideController.hpp>
 #include <hyprland/src/render/OpenGL.hpp>
 #include <hyprland/src/render/Renderer.hpp>
-#include <hyprland/src/desktop/state/FocusState.hpp>
 #include <hyprutils/math/Box.hpp>
 
 #include "config.hpp"
 #include "globals.hpp"
 #include "layout/column.hpp"
-#include "layout/grid.hpp"
-#include "layout/linear.hpp"
+#include "src/desktop/state/FocusState.hpp"
 
-HTView::HTView(MONITORID in_monitor_id)
-{
+HTView::HTView(MONITORID in_monitor_id) {
     monitor_id = in_monitor_id;
     active = false;
     closing = false;
@@ -27,34 +24,16 @@ HTView::HTView(MONITORID in_monitor_id)
     change_layout(HTConfig::value<Hyprlang::STRING>("layout"));
 }
 
-void HTView::change_layout(const std::string &layout_name)
-{
-    if (layout != nullptr && layout->layout_name() == layout_name)
-    {
+void HTView::change_layout(const std::string& layout_name) {
+    if (layout != nullptr && layout->layout_name() == layout_name) {
         layout->init_position();
         return;
     }
 
-    if (layout_name == "column")
-    {
-        layout = makeShared<HTLayoutColumn>(monitor_id);
-    }
-    else if (layout_name == "grid")
-    {
-        layout = makeShared<HTLayoutGrid>(monitor_id);
-    }
-    else if (layout_name == "linear")
-    {
-        layout = makeShared<HTLayoutLinear>(monitor_id);
-    }
-    else
-    {
-        fail_exit("Bad overview layout name {}, supported ones are 'column', 'grid' and 'linear'", layout_name);
-    }
+    layout = makeShared<HTLayoutColumn>(monitor_id);
 }
 
-void HTView::do_exit_behavior(bool exit_on_mouse)
-{
+void HTView::do_exit_behavior(bool exit_on_mouse) {
     const PHLMONITOR monitor = get_monitor();
     if (monitor == nullptr) //???
         return;
@@ -98,8 +77,7 @@ void HTView::do_exit_behavior(bool exit_on_mouse)
     }
 }
 
-void HTView::show()
-{
+void HTView::show(bool recalculate) {
     const PHLMONITOR monitor = get_monitor();
     if (monitor == nullptr)
         return;
@@ -111,10 +89,13 @@ void HTView::show()
     closing = false;
     navigating = false;
 
+    if (recalculate) {
+        layout->init_position();
+    }
     layout->on_show();
 
-    // Preserve workspaces after layout is built to prevent them from being destroyed
-    // when windows are moved away during overview mode
+    // Preserve workspaces once the layout is built so empty ones aren't
+    // destroyed while shown in the overview.
     preserve_workspaces();
 
     Cursor::overrideController->setOverride("left_ptr", Cursor::CURSOR_OVERRIDE_UNKNOWN);
@@ -123,8 +104,7 @@ void HTView::show()
     g_pCompositor->scheduleFrameForMonitor(monitor);
 }
 
-void HTView::hide(bool exit_on_mouse)
-{
+void HTView::hide(bool exit_on_mouse) {
     const PHLMONITOR monitor = get_monitor();
     if (monitor == nullptr)
         return;
@@ -142,8 +122,8 @@ void HTView::hide(bool exit_on_mouse)
         active = false;
         closing = false;
 
-        // Release workspace preservation when the overview animation completes
-        // Empty workspaces will be destroyed automatically after this
+        // Release workspace references once the close animation completes;
+        // empty workspaces are then destroyed normally.
         release_workspaces();
     });
 
@@ -153,10 +133,32 @@ void HTView::hide(bool exit_on_mouse)
     g_pCompositor->scheduleFrameForMonitor(monitor);
 }
 
-void HTView::warp_window(Hyprlang::INT warp, PHLWINDOW window)
-{
-    if (warp > 0)
-    {
+void HTView::preserve_workspaces() {
+    preserved_workspaces.clear();
+
+    // Hold a reference to every workspace currently in the overview layout.
+    for (const auto& [ws_id, ws_layout] : layout->overview_layout) {
+        PHLWORKSPACE ws = g_pCompositor->getWorkspaceByID(ws_id);
+        if (ws != nullptr)
+            preserved_workspaces.push_back(ws);
+    }
+
+    Log::logger->log(
+        LOG,
+        "[hyprtile] Holding references to {} workspaces during overview",
+        preserved_workspaces.size()
+    );
+}
+
+void HTView::release_workspaces() {
+    Log::logger->log(LOG, "[hyprtile] Releasing {} workspace references", preserved_workspaces.size());
+    preserved_workspaces.clear();
+}
+
+void HTView::warp_window(Hyprlang::INT warp, PHLWINDOW window) {
+    // taken from Hyprland:
+    // https://github.com/hyprwm/Hyprland/blob/ea42041f936d5810c5cfa45d6bece12dde2fd9b6/src/managers/KeybindManager.cpp#L1319
+    if (warp > 0) {
         auto HLSurface = Desktop::View::CWLSurface::fromResource(g_pSeatManager->m_state.pointerFocus.lock());
 
         if (window && (!HLSurface || HLSurface->view()))
@@ -164,8 +166,7 @@ void HTView::warp_window(Hyprlang::INT warp, PHLWINDOW window)
     }
 }
 
-void HTView::move_id(WORKSPACEID ws_id, bool move_window)
-{
+void HTView::move_id(WORKSPACEID ws_id, bool move_window) {
     navigating = false;
     if (closing)
         return;
@@ -178,8 +179,9 @@ void HTView::move_id(WORKSPACEID ws_id, bool move_window)
 
     // FIXME: weird hovered window duplicate code
     PHLWINDOW hovered_window = ht_manager->get_window_from_cursor();
+    bool should_move = true;
     if (hovered_window == nullptr && move_window)
-        return;
+        should_move = false;
 
     PHLWORKSPACE other_workspace = g_pCompositor->getWorkspaceByID(ws_id);
     if (other_workspace == nullptr && ws_id != WORKSPACE_INVALID)
@@ -187,32 +189,29 @@ void HTView::move_id(WORKSPACEID ws_id, bool move_window)
     if (other_workspace == nullptr)
         return;
 
-    if (move_window)
-    {
+    // nofocus = true to not change window focus history when navigation
+    monitor->changeWorkspace(other_workspace, false, false, true);
+    if (move_window && should_move) {
         g_pCompositor->moveWindowToWorkspaceSafe(hovered_window, other_workspace);
     }
 
     Hyprlang::INT warp;
 
-    // nofocus = true to not change window focus history when navigation
-    monitor->changeWorkspace(other_workspace, false, false, true);
-    if (move_window)
-    {
+    if (move_window) {
         Desktop::focusState()->fullWindowFocus(hovered_window, Desktop::FOCUS_REASON_CLICK);
-        warp = *CConfigValue<Hyprlang::INT>("plugin:hyprtile:expo:warp_on_move_window");
-    }
-    else
-    {
+        warp = HTConfig::value<Hyprlang::INT>("warp_on_move_window");
+    } else {
         warp = *CConfigValue<Hyprlang::INT>("cursor:warp_on_change_workspace");
     }
     warp_window(warp, hovered_window);
 
     navigating = true;
-    layout->on_move(active_workspace->m_id, other_workspace->m_id, [this](auto self) { navigating = false; });
+    layout->on_move(active_workspace->m_id, other_workspace->m_id, [this](auto self) {
+        navigating = false;
+    });
 }
 
-void HTView::move(std::string arg, bool move_window)
-{
+void HTView::move(std::string arg, bool move_window) {
     const PHLMONITOR monitor = get_monitor();
     if (monitor == nullptr)
         return;
@@ -223,48 +222,23 @@ void HTView::move(std::string arg, bool move_window)
     if (hovered_window == nullptr && move_window)
         return;
 
-    // if moving a window, the up/down/left/right should be relative to the window (and cursor) and not necessarily the
-    // active workspace
-    const WORKSPACEID source_ws_id = move_window ? hovered_window->workspaceID() : active_workspace->m_id;
-    layout->build_overview_layout(HT_VIEW_CLOSED);
+    // if moving a window, the up/down/left/right should be relative to the window (and cursor) and not necessarily the active workspace
+    const WORKSPACEID source_ws_id =
+        move_window ? hovered_window->workspaceID() : active_workspace->m_id;
+    if (!navigating && !active) {
+        layout->init_position();
+    } else {
+        layout->build_overview_layout(HT_VIEW_CLOSED);
+    }
     const auto ws_layout = layout->overview_layout[source_ws_id];
     const WORKSPACEID id = layout->get_ws_id_in_direction(ws_layout.x, ws_layout.y, arg);
 
     move_id(id, move_window);
 }
 
-PHLMONITOR HTView::get_monitor()
-{
+PHLMONITOR HTView::get_monitor() {
     const PHLMONITOR monitor = g_pCompositor->getMonitorFromID(monitor_id);
     if (monitor == nullptr)
         Log::logger->log(Log::WARN, "[Hyprtile Overview] Returning null monitor from get_monitor!");
     return monitor;
-}
-
-void HTView::preserve_workspaces()
-{
-    preserved_workspaces.clear();
-
-    // Hold references to all workspaces currently in the overview layout.
-    // This prevents Hyprland from destroying empty workspaces during overview mode.
-    for (const auto &[ws_id, ws_layout] : layout->overview_layout)
-    {
-        PHLWORKSPACE ws = g_pCompositor->getWorkspaceByID(ws_id);
-        if (ws != nullptr)
-        {
-            preserved_workspaces.push_back(ws);
-        }
-    }
-
-    Log::logger->log(LOG, "[hyprtile] Holding references to {} workspaces during overview",
-                     preserved_workspaces.size());
-}
-
-void HTView::release_workspaces()
-{
-    Log::logger->log(LOG, "[hyprtile] Releasing {} workspace references", preserved_workspaces.size());
-
-    // Simply clear the vector to release our references.
-    // Empty workspaces will be destroyed automatically by Hyprland's reference counting.
-    preserved_workspaces.clear();
 }

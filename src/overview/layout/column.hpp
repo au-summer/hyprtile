@@ -46,5 +46,6 @@ class HTLayoutColumn : public HTLayoutBase {
     virtual float drag_window_scale();
     virtual void init_position();
     virtual void build_overview_layout(HTViewStage stage);
+    virtual void prepare_workspaces();
     virtual void render();
 };
